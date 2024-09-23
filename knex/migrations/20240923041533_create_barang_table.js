@@ -1,7 +1,10 @@
 exports.up = function(knex) {
     return knex.schema.createTable('barang', function(table) {
       table.increments('id').primary();
-      table.string('namaBarang').notNullable();
+      table.integer('barangId').unsigned()
+      .references('id')
+      .inTable('detail_barang')
+      .onDelete('CASCADE').notNullable();
       table.integer('jumlahBarang').notNullable();
       table.float('harga').notNullable();
       table.integer('pengirimanId')

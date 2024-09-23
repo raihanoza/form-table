@@ -1,24 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import knex from "../../../knex";
 
-//   id?: number;
-//   namaBarang: string;
-//   jumlahBarang: number;
-//   harga: number;
-// }
-
-// Handle POST Request
-
-// type QueryParams = {
-//   page?: string;
-//   limit?: string;
-//   namaPengirim?: string;
-//   namaPenerima?: string;
-//   tanggalKeberangkatan?: string;
-// };
-
-// Handle GET Request
-// app/api/pengiriman/route.ts
 
 export async function POST(request: NextRequest) {
   try {

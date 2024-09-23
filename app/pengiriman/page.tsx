@@ -27,7 +27,7 @@ interface IPengirimanForm {
 
 // Fungsi POST untuk mengirim data
 const submitPengiriman = async (data: IPengirimanForm) => {
-  const res = await fetch("/api/pengiriman", {
+  const res = await fetch("/api/kirim-barang", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
