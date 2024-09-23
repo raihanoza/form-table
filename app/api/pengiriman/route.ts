@@ -1,49 +1,13 @@
-import { PrismaClient, Prisma } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import knex from '../../../knex';
 
-const prisma = new PrismaClient();
-
-interface Barang {
-  id?: number;
-  namaBarang: string;
-  jumlahBarang: number;
-  harga: number;
-}
+//   id?: number;
+//   namaBarang: string;
+//   jumlahBarang: number;
+//   harga: number;
+// }
 
 // Handle POST Request
-export async function POST(request: Request) {
-  try {
-    const data = await request.json();
-
-    const newPengiriman = await prisma.pengiriman.create({
-      data: {
-        namaPengirim: data.namaPengirim,
-        alamatPengirim: data.alamatPengirim,
-        nohpPengirim: data.nohpPengirim,
-        namaPenerima: data.namaPenerima,
-        alamatPenerima: data.alamatPenerima,
-        nohpPenerima: data.nohpPenerima,
-        totalHarga: data.totalHarga,
-        tanggalKeberangkatan: new Date(data.tanggalKeberangkatan),
-        barang: {
-          create: data.barang.map((item: Barang) => ({
-            namaBarang: item.namaBarang,
-            jumlahBarang: item.jumlahBarang,
-            harga: item.harga,
-          })),
-        },
-      },
-    });
-
-    return NextResponse.json(newPengiriman);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { error: "Error creating pengiriman" },
-      { status: 500 }
-    );
-  }
-}
 
 // type QueryParams = {
 //   page?: string;
@@ -54,76 +18,66 @@ export async function POST(request: Request) {
 // };
 
 // Handle GET Request
-export async function GET(request: Request) {
+// app/api/pengiriman/route.ts
+
+
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const page = searchParams.get("page") || "1";
-    const limit = searchParams.get("limit") || "10";
-    const namaPengirim = searchParams.get("namaPengirim") || "";
-    const namaPenerima = searchParams.get("namaPenerima") || "";
-    const tanggalKeberangkatan = searchParams.get("tanggalKeberangkatan");
-    const totalHarga = searchParams.get("totalHarga");
-    const barang = searchParams.get("barang");
+    // Parse the JSON body from the request
+    const { filters, pagination } = await request.json();
+    
+    const page = pagination?.page ? parseInt(pagination.page) : 1;
+    const limit = pagination?.limit ? parseInt(pagination.limit) : 10;
 
-    // Setup paginasi
-    const take = parseInt(limit); // Batasan per halaman
-    const skip = (parseInt(page) - 1) * take; // Jumlah data yang dilewati
+    // Setup pagination
+    const offset = (page - 1) * limit;
 
-    // Definisikan tipe filter secara eksplisit
-    const filters: Prisma.PengirimanFindManyArgs = {
-      where: {
-        namaPengirim: {
-          contains: namaPengirim, // Filter by namaPengirim jika tersedia
-        },
-        namaPenerima: {
-          contains: namaPenerima, // Filter by namaPenerima jika tersedia
-        },
-        tanggalKeberangkatan: tanggalKeberangkatan
-          ? new Date(tanggalKeberangkatan)
-          : undefined, // Filter by tanggalKeberangkatan jika tersedia
-      },
-      take, // Ambil sejumlah data yang diminta (paginasi)
-      skip, // Lewati sejumlah data untuk paginasi
-      orderBy: {
-        tanggalKeberangkatan: "desc", // Gunakan string "desc" langsung
-      },
-      include: {
-        barang: true, // Sertakan data barang terkait
-      },
-    };
+    // Build the base query
+    const query = knex('pengiriman')
+      .select('*')
+      .offset(offset)
+      .limit(limit)
+      .orderBy('tanggalKeberangkatan', 'desc');
 
-    // Tambahkan filter untuk `totalHarga` jika ada
-    if (totalHarga) {
-      filters.where!.totalHarga = {
-        equals: parseFloat(totalHarga), // Filter by totalHarga jika tersedia
-      };
+    // Add filters to the query based on the JSON body
+    if (filters.namaPengirim) {
+      query.where('namaPengirim', 'like', `%${filters.namaPengirim}%`);
+    }
+    if (filters.namaPenerima) {
+      query.where('namaPenerima', 'like', `%${filters.namaPenerima}%`);
+    }
+    if (filters.tanggalKeberangkatan) {
+      query.where('tanggalKeberangkatan', '=', new Date(filters.tanggalKeberangkatan));
+    }
+    if (filters.totalHarga) {
+      query.where('totalHarga', '=', parseFloat(filters.totalHarga)); // Pastikan totalHarga diparsing sebagai angka
+    }
+    if (filters.barangFilter) { // Menggunakan nama barang filter
+      query.whereExists(function() {
+        this.select('*')
+          .from('barang')
+          .whereRaw('barang.pengirimanId = pengiriman.id')
+          .andWhere('barang.namaBarang', 'like', `%${filters.barangFilter}%`);
+      });
     }
 
-    // Tambahkan filter untuk `barang` jika ada
-    if (barang) {
-      filters.where!.barang = {
-        some: {
-          namaBarang: {
-            contains: barang, // Filter by barang (nama) jika tersedia
-          },
-        },
-      };
-    }
+    // Get the total number of records matching the filters
+    const [{ count }] = await knex('pengiriman').count('* as count').where(query.whereRaw('1=1'));
 
-    // Dapatkan total data yang sesuai dengan filter
-    const totalData = await prisma.pengiriman.count({ where: filters.where });
+    // Pastikan count diperlakukan sebagai angka
+    const totalCount = typeof count === 'string' ? parseInt(count) : count;
 
-    // Query data Pengiriman dari database
-    const pengirimanData = await prisma.pengiriman.findMany(filters);
+    // Execute the query to get the paginated data
+    const pengirimanData = await query;
 
     return NextResponse.json({
-      totalData,
-      totalPages: Math.ceil(totalData / take),
-      currentPage: parseInt(page),
+      totalData: totalCount, // Gunakan jumlah yang sudah dipastikan
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
       data: pengirimanData,
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching data:', error);
     return NextResponse.json(
       { error: "Something went wrong." },
       { status: 500 }

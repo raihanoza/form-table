@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import React from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
-import { useMutation } from "react-query";
+import { useMutation, useQuery } from "react-query";
 
 // Interface data form
 interface Barang {
@@ -42,13 +42,20 @@ const submitPengiriman = async (data: IPengirimanForm) => {
   return res.json();
 };
 
+// Function to fetch detail barang
+const fetchDetailBarang = async () => {
+  const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
+  if (!res.ok) throw new Error("Failed to fetch detail barang");
+  return res.json();
+};
+
 export default function PengirimanForm() {
   const { register, control, handleSubmit, reset, setValue } =
     useForm<IPengirimanForm>({
       defaultValues: {
         barang: [{ namaBarang: "", jumlahBarang: 1, harga: 0 }],
-        totalHarga: 0, // Initialize totalHarga
-        tanggalKeberangkatan: "", // Initialize tanggalKeberangkatan
+        totalHarga: 0,
+        tanggalKeberangkatan: "",
       },
     });
 
@@ -59,17 +66,22 @@ export default function PengirimanForm() {
 
   const barang = useWatch({ control, name: "barang" });
 
-  // Calculate totalHarga
+  // Fetch detail barang
+  const { data: detailBarangOptions = [], isLoading } = useQuery(
+    "detailBarang",
+    fetchDetailBarang
+  );
+
   const calculateTotalHarga = () => {
     const total = barang.reduce(
       (sum, item) => sum + item.jumlahBarang * item.harga,
       0
     );
-    setValue("totalHarga", total); // Update the totalHarga in form
+    setValue("totalHarga", total);
   };
+
   const router = useRouter();
 
-  // Watch for changes in barang array and recalculate totalHarga
   React.useEffect(() => {
     calculateTotalHarga();
   }, [barang]);
@@ -78,7 +90,7 @@ export default function PengirimanForm() {
     onSuccess: () => {
       alert("Pengiriman berhasil disimpan!");
       reset();
-      router.push("/"); // Redirect to homepage after successful submission
+      router.push("/");
     },
     onError: () => {
       alert("Error dalam menyimpan data.");
@@ -94,7 +106,7 @@ export default function PengirimanForm() {
       <h1 className="text-2xl font-bold mb-6 text-center">Form Pengiriman</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div>
             <label className="block mb-1">Nama Pengirim</label>
             <input
               {...register("namaPengirim", { required: true })}
@@ -149,18 +161,24 @@ export default function PengirimanForm() {
         <div>
           <h2 className="text-xl font-bold mb-4">Barang</h2>
           {fields.map((item: Barang, index: number) => (
-            <div
-              key={item.id}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
-            >
+            <div key={item.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block mb-1">Nama Barang</label>
-                <input
-                  {...register(`barang.${index}.namaBarang`, {
-                    required: true,
-                  })}
+                <select
+                  {...register(`barang.${index}.namaBarang`, { required: true })}
                   className="w-full border border-gray-300 p-2"
-                />
+                >
+                  <option value="">Pilih Barang</option>
+                  {isLoading ? (
+                    <option value="">Loading...</option>
+                  ) : (
+                    detailBarangOptions.map((barang: { id: string; nama: string }) => (
+                      <option key={barang.id} value={barang.nama}>
+                        {barang.nama}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
               <div>
                 <label className="block mb-1">Jumlah Barang</label>
@@ -197,9 +215,7 @@ export default function PengirimanForm() {
           ))}
           <button
             type="button"
-            onClick={() =>
-              append({ namaBarang: "", jumlahBarang: 1, harga: 0 })
-            }
+            onClick={() => append({ namaBarang: "", jumlahBarang: 1, harga: 0 })}
             className="text-blue-500"
           >
             Tambah Barang

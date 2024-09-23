@@ -41,8 +41,10 @@ interface FetchResponse {
 
 // Function to fetch the data with pagination and filters
 const fetchPengiriman = async (
-  page: number,
-  limit: number,
+  pagination: {
+    page: number;
+    limit: number;
+  },
   filters: {
     namaPengirim: string;
     namaPenerima: string;
@@ -51,12 +53,14 @@ const fetchPengiriman = async (
     barangFilter: string; // Filter for barang
   }
 ): Promise<FetchResponse> => {
-  const query = new URLSearchParams({
-    page: page.toString(),
-    limit: limit.toString(),
-    ...filters,
+  const response = await fetch(`/api/pengiriman`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ pagination, filters }),
   });
-  const response = await fetch(`/api/pengiriman?${query.toString()}`);
+  
   if (!response.ok) {
     throw new Error("Network response was not ok");
   }
@@ -91,7 +95,7 @@ const PengirimanTable: React.FC = () => {
   // Fetching the data using react-query
   const { data, isLoading, isError, refetch } = useQuery<FetchResponse, Error>(
     ["pengiriman", pagination.page, pagination.limit, filters],
-    () => fetchPengiriman(pagination.page, pagination.limit, filters),
+    () => fetchPengiriman(pagination, filters),
     {
       keepPreviousData: true,
     }
@@ -226,10 +230,9 @@ const PengirimanTable: React.FC = () => {
     };
   }) => {
     const filterModel = event.api.getFilterModel();
-    const formattedTanggal = filterModel.tanggalKeberangkatan?.dateFrom
-      ? new Date(filterModel.tanggalKeberangkatan?.dateFrom)
-          .toISOString()
-          .split("T")[0]
+    const selectedDate = filterModel.tanggalKeberangkatan?.dateFrom;
+    const formattedTanggal = selectedDate
+      ? new Date(selectedDate).toLocaleDateString('en-CA')
       : "";
     setFilters({
       namaPengirim: filterModel.namaPengirim?.filter ?? "",

@@ -32,15 +32,17 @@ const Page = () => {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6 text-center">Daftar Pengiriman</h1>
+      <div className="flex flex-row justify-between px-10">
+        <Button
+          onClick={() => router.push("/pengiriman")}
+          variant="default"
+          className="mb-4 w-fit"
+        >
+          Tambah Pengiriman
+        </Button>
+        <Button onClick={() => signOut()}>Log-Out</Button>
+      </div>
 
-      <Button
-        onClick={() => router.push("/pengiriman")}
-        variant="default"
-        className="mb-4 w-fit"
-      >
-        Tambah Pengiriman
-      </Button>
-      <Button onClick={() => signOut()}>Log-Out</Button>
       {isAuthorized && <PengirimanTable />}
     </div>
   );
