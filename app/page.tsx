@@ -4,7 +4,7 @@ import PengirimanTable from "@/components/GridTable";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getSession } from "next-auth/react";
+import { getSession, signOut } from "next-auth/react";
 
 const Page = () => {
   const router = useRouter();
@@ -40,6 +40,7 @@ const Page = () => {
       >
         Tambah Pengiriman
       </Button>
+      <Button onClick={() => signOut()}>Log-Out</Button>
       {isAuthorized && <PengirimanTable />}
     </div>
   );

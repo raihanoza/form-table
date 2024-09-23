@@ -62,13 +62,15 @@ export async function GET(request: Request) {
     const namaPengirim = searchParams.get("namaPengirim") || "";
     const namaPenerima = searchParams.get("namaPenerima") || "";
     const tanggalKeberangkatan = searchParams.get("tanggalKeberangkatan");
+    const totalHarga = searchParams.get("totalHarga");
+    const barang = searchParams.get("barang");
 
     // Setup paginasi
     const take = parseInt(limit); // Batasan per halaman
     const skip = (parseInt(page) - 1) * take; // Jumlah data yang dilewati
 
-    // Filter opsional berdasarkan query params
-    const filters = {
+    // Definisikan tipe filter secara eksplisit
+    const filters: Prisma.PengirimanFindManyArgs = {
       where: {
         namaPengirim: {
           contains: namaPengirim, // Filter by namaPengirim jika tersedia
@@ -83,12 +85,30 @@ export async function GET(request: Request) {
       take, // Ambil sejumlah data yang diminta (paginasi)
       skip, // Lewati sejumlah data untuk paginasi
       orderBy: {
-        tanggalKeberangkatan: Prisma.SortOrder.desc, // Gunakan enum SortOrder untuk pengurutan
+        tanggalKeberangkatan: "desc", // Gunakan string "desc" langsung
       },
       include: {
         barang: true, // Sertakan data barang terkait
       },
     };
+
+    // Tambahkan filter untuk `totalHarga` jika ada
+    if (totalHarga) {
+      filters.where!.totalHarga = {
+        equals: parseFloat(totalHarga), // Filter by totalHarga jika tersedia
+      };
+    }
+
+    // Tambahkan filter untuk `barang` jika ada
+    if (barang) {
+      filters.where!.barang = {
+        some: {
+          namaBarang: {
+            contains: barang, // Filter by barang (nama) jika tersedia
+          },
+        },
+      };
+    }
 
     // Dapatkan total data yang sesuai dengan filter
     const totalData = await prisma.pengiriman.count({ where: filters.where });

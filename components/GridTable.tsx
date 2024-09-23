@@ -39,6 +39,7 @@ interface FetchResponse {
   data: Pengiriman[];
 }
 
+// Function to fetch the data with pagination and filters
 const fetchPengiriman = async (
   page: number,
   limit: number,
@@ -46,6 +47,8 @@ const fetchPengiriman = async (
     namaPengirim: string;
     namaPenerima: string;
     tanggalKeberangkatan: string;
+    totalHarga: string;
+    barangFilter: string; // Filter for barang
   }
 ): Promise<FetchResponse> => {
   const query = new URLSearchParams({
@@ -75,12 +78,17 @@ const PengirimanTable: React.FC = () => {
     namaPengirim: string;
     namaPenerima: string;
     tanggalKeberangkatan: string;
+    totalHarga: string;
+    barangFilter: string; // New filter state for barang
   }>({
     namaPengirim: "",
     namaPenerima: "",
     tanggalKeberangkatan: "",
+    totalHarga: "",
+    barangFilter: "", // Initialize the filter for barang
   });
 
+  // Fetching the data using react-query
   const { data, isLoading, isError, refetch } = useQuery<FetchResponse, Error>(
     ["pengiriman", pagination.page, pagination.limit, filters],
     () => fetchPengiriman(pagination.page, pagination.limit, filters),
@@ -88,10 +96,11 @@ const PengirimanTable: React.FC = () => {
       keepPreviousData: true,
     }
   );
+
   const router = useRouter();
 
   useEffect(() => {
-    // Memanggil ulang data saat pagination berubah
+    // Refetch when pagination changes
     refetch();
   }, [pagination.page, refetch]);
 
@@ -108,11 +117,13 @@ const PengirimanTable: React.FC = () => {
       )
     );
   };
+
   const queryClient = useQueryClient();
 
   const handleUpdate = (id: number) => {
     router.push(`/pengiriman/${id}`);
   };
+
   const mutation = useMutation({
     mutationFn: async (id: number) => {
       await fetch(`/api/pengiriman/${id}`, { method: "DELETE" });
@@ -124,10 +135,27 @@ const PengirimanTable: React.FC = () => {
       console.error("Error deleting pengiriman", error);
     },
   });
+
   const handleDelete = (id: number) => {
     if (window.confirm("Are you sure you want to delete this item?")) {
       mutation.mutate(id);
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  };
+
+  const formatBarang = (barang: Barang[] | undefined) => {
+    if (!barang) return ""; // Handle undefined barang
+    return barang
+      .map((item) => `${item.namaBarang} (${item.jumlahBarang} pcs)`)
+      .join(", ");
   };
 
   const columns: ColDef<Pengiriman>[] = [
@@ -147,16 +175,30 @@ const PengirimanTable: React.FC = () => {
       cellRenderer: (params: ValueGetterParams) =>
         highlightText(params.data.namaPenerima, filters.namaPenerima),
     },
-    { headerName: "Total Harga", field: "totalHarga" },
+    {
+      headerName: "Total Harga",
+      field: "totalHarga",
+      filter: "agTextColumnFilter",
+      floatingFilter: true,
+      cellRenderer: (params: ValueGetterParams) =>
+        highlightText(params.data.totalHarga.toString(), filters.totalHarga),
+    },
     {
       headerName: "Tanggal Keberangkatan",
       field: "tanggalKeberangkatan",
+      filter: "agDateColumnFilter",
+      floatingFilter: true,
+      cellRenderer: (params: ValueGetterParams) =>
+        formatDate(params.data.tanggalKeberangkatan),
     },
     {
       headerName: "Barang",
       field: "barang",
-      valueGetter: (params) =>
-        params?.data?.barang.map((item) => item.namaBarang).join(", "),
+      filter: "agTextColumnFilter", // Adding a text filter for barang
+      floatingFilter: true,
+      valueGetter: (params) => formatBarang(params?.data?.barang),
+      cellRenderer: (params: ValueGetterParams) =>
+        highlightText(formatBarang(params.data.barang), filters.barangFilter),
     },
     {
       headerName: "Actions",
@@ -184,10 +226,17 @@ const PengirimanTable: React.FC = () => {
     };
   }) => {
     const filterModel = event.api.getFilterModel();
+    const formattedTanggal = filterModel.tanggalKeberangkatan?.dateFrom
+      ? new Date(filterModel.tanggalKeberangkatan?.dateFrom)
+          .toISOString()
+          .split("T")[0]
+      : "";
     setFilters({
       namaPengirim: filterModel.namaPengirim?.filter ?? "",
       namaPenerima: filterModel.namaPenerima?.filter ?? "",
-      tanggalKeberangkatan: filterModel.tanggalKeberangkatan?.dateFrom ?? "",
+      tanggalKeberangkatan: formattedTanggal,
+      totalHarga: filters.totalHarga, // Keep the existing totalHarga filter
+      barangFilter: filterModel.barang?.filter ?? "", // Capture the filter for barang
     });
   };
 
@@ -217,7 +266,7 @@ const PengirimanTable: React.FC = () => {
         pagination={false}
         onFilterChanged={handleFilterChanged}
       />
-      {/* Komponen Pagination */}
+      {/* Pagination Component */}
       <div style={{ marginTop: "10px" }}>
         <Button
           style={{ marginRight: "5px" }}
