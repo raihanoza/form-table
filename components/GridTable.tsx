@@ -41,16 +41,13 @@ interface FetchResponse {
 
 // Function to fetch the data with pagination and filters
 const fetchPengiriman = async (
-  pagination: {
-    page: number;
-    limit: number;
-  },
+  pagination: { page: number; limit: number },
   filters: {
     namaPengirim: string;
     namaPenerima: string;
-    tanggalKeberangkatan: string;
+    tanggalKeberangkatan: string; // Pastikan ini diformat dengan benar
     totalHarga: string;
-    barangFilter: string; // Filter for barang
+    barangFilter: string; // Pastikan barangFilter ini diisi jika diperlukan
   }
 ): Promise<FetchResponse> => {
   const response = await fetch(`/api/pengiriman`, {
@@ -60,7 +57,7 @@ const fetchPengiriman = async (
     },
     body: JSON.stringify({ pagination, filters }),
   });
-  
+
   if (!response.ok) {
     throw new Error("Network response was not ok");
   }
@@ -232,7 +229,7 @@ const PengirimanTable: React.FC = () => {
     const filterModel = event.api.getFilterModel();
     const selectedDate = filterModel.tanggalKeberangkatan?.dateFrom;
     const formattedTanggal = selectedDate
-      ? new Date(selectedDate).toLocaleDateString('en-CA')
+      ? new Date(selectedDate).toLocaleDateString("en-CA")
       : "";
     setFilters({
       namaPengirim: filterModel.namaPengirim?.filter ?? "",
