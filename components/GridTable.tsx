@@ -4,8 +4,18 @@ import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { AgGridReact } from "ag-grid-react";
 import {
+  CellPosition,
   ColDef,
+  Column,
+  ColumnGroup,
+  GridOptions,
+  HeaderPosition,
   ICellRendererParams,
+  NavigateToNextCellParams,
+  NavigateToNextHeaderParams,
+  RowClassParams,
+  TabToNextCellParams,
+  TabToNextHeaderParams,
   ValueGetterParams,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
@@ -66,6 +76,9 @@ const fetchPengiriman = async (
 };
 
 const PengirimanTable: React.FC = () => {
+  // const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+  console.log(focusedRowIndex)
   const [pagination, setPagination] = useState<{
     page: number;
     limit: number;
@@ -168,8 +181,7 @@ const PengirimanTable: React.FC = () => {
   //     .map((item) => `${item.namaBarang} (${item.jumlahBarang} pcs)`)
   //     .join(", ");
   // };
-  
-
+ 
   const columns: ColDef<Pengiriman>[] = [
     {
       headerName: "Nama Pengirim",
@@ -229,7 +241,214 @@ const PengirimanTable: React.FC = () => {
     },
   ];
  
+  const KEY_LEFT = "ArrowLeft";
+  const KEY_UP = "ArrowUp";
+  const KEY_RIGHT = "ArrowRight";
+  const KEY_DOWN = "ArrowDown";
+  
 
+  
+  function navigateToNextHeader(
+    params: NavigateToNextHeaderParams,
+  ): HeaderPosition | null {
+    const nextHeader = params.nextHeaderPosition;
+  
+    if (params.key !== "ArrowDown" && params.key !== "ArrowUp") {
+      return nextHeader;
+    }
+  
+    const processedNextHeader = moveHeaderFocusUpDown(
+      params.previousHeaderPosition!,
+      params.headerRowCount,
+      params.key === "ArrowDown",
+    );
+  
+    return processedNextHeader;
+  }
+  
+  function tabToNextHeader(params: TabToNextHeaderParams): HeaderPosition | null {
+    return moveHeaderFocusUpDown(
+      params.previousHeaderPosition!,
+      params.headerRowCount,
+      params.backwards,
+    );
+  }
+  
+  function moveHeaderFocusUpDown(
+    previousHeader: HeaderPosition,
+    headerRowCount: number,
+    isUp: boolean,
+  ): HeaderPosition {
+    const previousColumn = previousHeader.column;
+    const isSpanHeaderHeight =
+      !!(previousColumn as Column).isSpanHeaderHeight &&
+      (previousColumn as Column).isSpanHeaderHeight();
+  
+    const lastRowIndex = previousHeader.headerRowIndex;
+    let nextRowIndex = isUp ? lastRowIndex - 1 : lastRowIndex + 1;
+    let nextColumn;
+  
+    if (nextRowIndex === -1) {
+      return previousHeader;
+    }
+  
+    if (nextRowIndex === headerRowCount) {
+      nextRowIndex = -1;
+    }
+  
+    let parentColumn = previousColumn.getParent();
+    if (isUp) {
+      if (isSpanHeaderHeight) {
+        while (parentColumn && parentColumn.isPadding()) {
+          parentColumn = parentColumn.getParent();
+        }
+      }
+  
+      if (!parentColumn) {
+        return previousHeader;
+      }
+  
+      nextColumn = parentColumn;
+    } else {
+      const children =
+        ((previousColumn as ColumnGroup).getChildren &&
+          (previousColumn as ColumnGroup).getChildren()) ||
+        [];
+      nextColumn = children.length > 0 ? children[0] : previousColumn;
+    }
+  
+    return {
+      headerRowIndex: nextRowIndex,
+      column: nextColumn as Column,
+    };
+  }
+  
+  function tabToNextCell(params: TabToNextCellParams): CellPosition | null {
+    const previousCell = params.previousCellPosition;
+    const renderedRowCount = params.api!.getDisplayedRowCount();
+    const lastRowIndex = previousCell.rowIndex;
+  
+    let nextRowIndex = params.backwards ? lastRowIndex - 1 : lastRowIndex + 1;
+  
+    if (nextRowIndex < 0) {
+      nextRowIndex = -1;
+    }
+  
+    if (nextRowIndex >= renderedRowCount) {
+      nextRowIndex = renderedRowCount - 1;
+    }
+  
+    const result = {
+      rowIndex: nextRowIndex,
+      column: previousCell.column,
+      rowPinned: previousCell.rowPinned,
+    };
+  
+    return result;
+  }
+  const navigateToNextCell = (params: NavigateToNextCellParams): CellPosition | null => {
+    const previousCell = params.previousCellPosition;
+    const totalRows = data?.data.length || 0;
+  
+    let nextRowIndex;
+  
+    switch (params.key) {
+      case KEY_DOWN:
+        nextRowIndex = previousCell.rowIndex + 1;
+        if (nextRowIndex < totalRows) {
+          setFocusedRowIndex(nextRowIndex);
+          return {
+            rowIndex: nextRowIndex,
+            column: previousCell.column,
+            rowPinned: null, // Add this line
+          };
+        }
+        break;
+  
+      case KEY_UP:
+        nextRowIndex = previousCell.rowIndex - 1;
+        if (nextRowIndex >= 0) {
+          setFocusedRowIndex(nextRowIndex);
+          return {
+            rowIndex: nextRowIndex,
+            column: previousCell.column,
+            rowPinned: null, // Add this line
+          };
+        }
+        break;
+  
+      case KEY_RIGHT:
+      case KEY_LEFT:
+        // For horizontal navigation, just stay in the same row
+        return {
+          rowIndex: previousCell.rowIndex,
+          column: previousCell.column,
+          rowPinned: null, // Add this line
+        };
+    }
+  
+    return null; // Return null if navigation is not possible
+  };
+  
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const totalRows = data?.data.length || 0;
+  
+    // Update focusedRowIndex based on Arrow keys
+    if (event.key === "ArrowDown" && focusedRowIndex < totalRows - 1) {
+      setFocusedRowIndex((prev) => prev + 1);
+    } else if (event.key === "ArrowUp" && focusedRowIndex > 0) {
+      setFocusedRowIndex((prev) => prev - 1);
+    }
+  };
+  
+  useEffect(() => {
+    // Check if data and data.data are defined and if data.data has items
+    if (data && data.data && data.data.length > 0) {
+      setFocusedRowIndex(0); // Reset to the first row
+    }
+  }, [data]);
+  
+  
+  // console.log(focusedRowIndex)
+  useEffect(() => {
+    const gridElement = document.querySelector('.ag-theme-alpine') as HTMLElement;
+    
+    if (gridElement) {
+      gridElement.setAttribute('tabindex', '0'); // Make the grid focusable
+      gridElement.addEventListener('keydown', handleKeyDown);
+      gridElement.focus(); // Ensure the grid is focused on mount
+    }
+  
+    return () => {
+      if (gridElement) {
+        gridElement.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+  }, [focusedRowIndex, data]); // Re-apply when focusedRowIndex or data changes
+  
+  // Ensure to highlight the focused row
+  const getRowClass = (params: RowClassParams) => {
+    console.log('params',params)
+    return params.rowIndex === focusedRowIndex ? 'ag-row-focus' : '';
+  };
+
+  const gridOptions: GridOptions<Pengiriman> = {
+    defaultColDef: {
+      editable: true,
+      flex: 1,
+      minWidth: 100,
+      filter: true,
+    },
+    navigateToNextCell,
+    tabToNextCell,
+    navigateToNextHeader,
+    tabToNextHeader,
+    columnDefs: columns,
+    getRowClass // Make sure this is included
+  };
+  
+  
   const handleFilterChanged = (event: {
     api: {
       getFilterModel: () => Record<
@@ -273,10 +492,8 @@ const PengirimanTable: React.FC = () => {
         rowData={data?.data || []}
         columnDefs={columns}
         paginationPageSize={pagination.limit}
-        defaultColDef={{
-          flex: 1,
-          filter: true,
-        }}
+        gridOptions={{ ...gridOptions, getRowClass }}
+        getRowClass={getRowClass}
         // selectionColumnDef={}
         
         suppressCellFocus={true}

@@ -14,6 +14,8 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@ag-grid-community/react": "^32.2.0",
+    "@ag-grid-community/styles": "^32.2.0",
     "@azure/app-configuration": "^1.7.0",
     "@faker-js/faker": "^9.0.1",
     "@prisma/client": "^5.19.1",
