@@ -2,7 +2,7 @@
 import { useForm, useFieldArray, SubmitHandler } from "react-hook-form";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useMutation } from "react-query";
+import { useMutation, useQuery } from "react-query";
 
 // Define the type for form data
 type FormValues = {
@@ -13,7 +13,7 @@ type FormValues = {
   namaPenerima: string;
   alamatPenerima: string;
   nohpPenerima: string;
-  barang: { namaBarang: string; jumlahBarang: number; harga: number }[];
+  barang: { barangId: string; jumlahBarang: number; harga: number }[];
   totalHarga: number;
 };
 
@@ -45,7 +45,7 @@ const EditPengirimanPage = () => {
         namaPenerima: "",
         alamatPenerima: "",
         nohpPenerima: "",
-        barang: [{ namaBarang: "", jumlahBarang: 1, harga: 0 }],
+        barang: [{ barangId: "", jumlahBarang: 1, harga: 0 }],
         totalHarga: 0,
       },
     });
@@ -54,7 +54,16 @@ const EditPengirimanPage = () => {
     control,
     name: "barang",
   });
-
+  const fetchDetailBarang = async () => {
+    const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
+    if (!res.ok) throw new Error("Failed to fetch detail barang");
+    return res.json();
+  };
+  
+  const { data: detailBarangOptions = [], isLoading } = useQuery(
+    "detailBarang",
+    fetchDetailBarang
+  );
   const { id } = useParams(); // Use useParams to get URL parameters
   const pengirimanId = id as string;
 
@@ -104,7 +113,7 @@ const EditPengirimanPage = () => {
           alamatPenerima: data.alamatPenerima || "",
           nohpPenerima: data.nohpPenerima || "",
           barang: data.barang || [
-            { namaBarang: "", jumlahBarang: 1, harga: 0 },
+            { barangId: "", jumlahBarang: 1, harga: 0 },
           ],
           totalHarga: data.totalHarga || 0,
         };
@@ -191,12 +200,21 @@ const EditPengirimanPage = () => {
             >
               <div>
                 <label className="block mb-1">Nama Barang</label>
-                <input
-                  {...register(`barang.${index}.namaBarang`, {
-                    required: true,
-                  })}
+                <select
+                  {...register(`barang.${index}.barangId`, { required: true })}
                   className="w-full border border-gray-300 p-2"
-                />
+                >
+                  <option value="">Pilih Barang</option>
+                  {isLoading ? (
+                    <option value="">Loading...</option>
+                  ) : (
+                    detailBarangOptions.map((barang: { id: string; nama: string }) => (
+                      <option key={barang.id} value={barang.id}>
+                        {barang.nama}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
               <div>
                 <label className="block mb-1">Jumlah Barang</label>
@@ -234,7 +252,7 @@ const EditPengirimanPage = () => {
           <button
             type="button"
             onClick={() =>
-              append({ namaBarang: "", jumlahBarang: 1, harga: 0 })
+              append({ barangId: "", jumlahBarang: 1, harga: 0 })
             }
             className="text-blue-500"
           >

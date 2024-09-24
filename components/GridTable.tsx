@@ -14,7 +14,8 @@ import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 
 interface Barang {
-  namaBarang: string;
+  id: string;
+  namaBarang:string;
   jumlahBarang: number;
   harga: number;
 }
@@ -97,7 +98,16 @@ const PengirimanTable: React.FC = () => {
       keepPreviousData: true,
     }
   );
-
+  console.log(data)
+  // const fetchDetailBarang = async () => {
+  //   const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
+  //   if (!res.ok) throw new Error("Failed to fetch detail barang");
+  //   return res.json();
+  // };
+  // const { data: detailBarangOptions = [], isLoading:isLoadingDetail } = useQuery(
+  //   "detailBarang",
+  //   fetchDetailBarang
+  // );
   const router = useRouter();
 
   useEffect(() => {
@@ -152,12 +162,13 @@ const PengirimanTable: React.FC = () => {
     }).format(date);
   };
 
-  const formatBarang = (barang: Barang[] | undefined) => {
-    if (!barang) return ""; // Handle undefined barang
-    return barang
-      .map((item) => `${item.namaBarang} (${item.jumlahBarang} pcs)`)
-      .join(", ");
-  };
+  // const formatBarang = (barang: Barang[] | undefined) => {
+  //   if (!barang) return ""; // Handle undefined barang
+  //   return barang
+  //     .map((item) => `${item.namaBarang} (${item.jumlahBarang} pcs)`)
+  //     .join(", ");
+  // };
+  
 
   const columns: ColDef<Pengiriman>[] = [
     {
@@ -192,15 +203,15 @@ const PengirimanTable: React.FC = () => {
       cellRenderer: (params: ValueGetterParams) =>
         formatDate(params.data.tanggalKeberangkatan),
     },
-    {
-      headerName: "Barang",
-      field: "barang",
-      filter: "agTextColumnFilter", // Adding a text filter for barang
-      floatingFilter: true,
-      valueGetter: (params) => formatBarang(params?.data?.barang),
-      cellRenderer: (params: ValueGetterParams) =>
-        highlightText(formatBarang(params.data.barang), filters.barangFilter),
-    },
+    // {
+    //   headerName: "Barang",
+    //   field: "barang",
+    //   filter: "agTextColumnFilter", // Adding a text filter for barang
+    //   floatingFilter: true,
+    //   valueGetter: (params) => formatBarang(params?.data?.barang),
+    //   cellRenderer: (params: ValueGetterParams) =>
+    //     highlightText(formatBarang(params.data.barang), filters.barangFilter),
+    // },    
     {
       headerName: "Actions",
       cellRenderer: (params: ICellRendererParams) => (
@@ -217,6 +228,7 @@ const PengirimanTable: React.FC = () => {
       cellClass: "text-center",
     },
   ];
+ 
 
   const handleFilterChanged = (event: {
     api: {
@@ -239,6 +251,7 @@ const PengirimanTable: React.FC = () => {
       barangFilter: filterModel.barang?.filter ?? "", // Capture the filter for barang
     });
   };
+  
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -259,11 +272,15 @@ const PengirimanTable: React.FC = () => {
       <AgGridReact
         rowData={data?.data || []}
         columnDefs={columns}
+        paginationPageSize={pagination.limit}
         defaultColDef={{
           flex: 1,
           filter: true,
         }}
-        pagination={false}
+        // selectionColumnDef={}
+        
+        suppressCellFocus={true}
+        pagination={true}
         onFilterChanged={handleFilterChanged}
       />
       {/* Pagination Component */}

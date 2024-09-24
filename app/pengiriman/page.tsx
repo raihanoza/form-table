@@ -8,7 +8,7 @@ import { useMutation, useQuery } from "react-query";
 // Interface data form
 interface Barang {
   id?: string;
-  namaBarang: string;
+  barangId: string;
   jumlahBarang: number;
   harga: number;
 }
@@ -53,7 +53,7 @@ export default function PengirimanForm() {
   const { register, control, handleSubmit, reset, setValue } =
     useForm<IPengirimanForm>({
       defaultValues: {
-        barang: [{ namaBarang: "", jumlahBarang: 1, harga: 0 }],
+        barang: [{ barangId: "", jumlahBarang: 1, harga: 0 }],
         totalHarga: 0,
         tanggalKeberangkatan: "",
       },
@@ -165,7 +165,7 @@ export default function PengirimanForm() {
               <div>
                 <label className="block mb-1">Nama Barang</label>
                 <select
-                  {...register(`barang.${index}.namaBarang`, { required: true })}
+                  {...register(`barang.${index}.barangId`, { required: true })}
                   className="w-full border border-gray-300 p-2"
                 >
                   <option value="">Pilih Barang</option>
@@ -173,7 +173,7 @@ export default function PengirimanForm() {
                     <option value="">Loading...</option>
                   ) : (
                     detailBarangOptions.map((barang: { id: string; nama: string }) => (
-                      <option key={barang.id} value={barang.nama}>
+                      <option key={barang.id} value={barang.id}>
                         {barang.nama}
                       </option>
                     ))
@@ -215,7 +215,7 @@ export default function PengirimanForm() {
           ))}
           <button
             type="button"
-            onClick={() => append({ namaBarang: "", jumlahBarang: 1, harga: 0 })}
+            onClick={() => append({ barangId: "", jumlahBarang: 1, harga: 0 })}
             className="text-blue-500"
           >
             Tambah Barang
