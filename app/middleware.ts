@@ -14,5 +14,5 @@ export async function middleware(request: NextRequest) {
 
 // Specify the paths to protect
 export const config = {
-  matcher: ["/pengiriman/*", "http://localhost:3000/", "/"], // Change this to match your protected routes
+  matcher: ["/pengiriman/*", "/"], // Change this to match your protected routes
 };
