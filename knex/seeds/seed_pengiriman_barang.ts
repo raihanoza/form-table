@@ -1,5 +1,5 @@
-import { faker } from '@faker-js/faker';
-import knex from '../../knex';
+import { faker } from "@faker-js/faker";
+import knex from "../../knex";
 
 export const seed = async () => {
   const pengirimanData = [];
@@ -13,9 +13,12 @@ export const seed = async () => {
     const namaPenerima = faker.person.fullName();
     const nohpPenerima = faker.phone.number();
     const alamatPenerima = faker.location.streetAddress();
-    
+
     // Convert date to MySQL compatible format
-    const tanggalKeberangkatan = new Date(faker.date.future()).toISOString().slice(0, 19).replace('T', ' '); 
+    const tanggalKeberangkatan = new Date(faker.date.future())
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
     const totalHarga = parseFloat(faker.commerce.price());
 
     pengirimanData.push({
@@ -31,7 +34,9 @@ export const seed = async () => {
   }
 
   // Insert data into the pengiriman table and get the IDs
-  const insertedPengirimanIds = await knex("pengiriman").insert(pengirimanData).returning("id");
+  const insertedPengirimanIds = await knex("pengiriman")
+    .insert(pengirimanData)
+    .returning("id");
 
   // Generate barang data based on the inserted pengiriman IDs
   for (let i = 0; i < insertedPengirimanIds.length; i++) {

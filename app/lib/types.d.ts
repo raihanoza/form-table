@@ -1,8 +1,9 @@
 export interface Barang {
-  id: number;
-  barangId: string;
-  jumlahBarang: number;
-  harga: number;
+  id: number; // Unique identifier for the barang
+  barangId: string; // References the ID from the detail_barang table
+  namaBarang: string; // Name of the barang
+  jumlahBarang: number; // Quantity of the barang
+  harga: number; // Price of the barang
 }
 
 export interface Pengiriman {

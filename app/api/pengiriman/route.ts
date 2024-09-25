@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import knex from "../../../knex";
+import { Pengiriman } from "@/app/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,46 +10,58 @@ export async function POST(request: NextRequest) {
     const limit = pagination?.limit ? parseInt(pagination.limit) : 10;
     const offset = (page - 1) * limit;
 
+    // Log filters and pagination for debugging
+    console.log("Filters:", filters);
+    console.log("Pagination:", pagination);
+
     // Base query for fetching pengiriman and related barang and detail_barang data
     const baseQuery = knex("pengiriman")
-  .leftJoin("barang", "pengiriman.id", "barang.pengirimanId")
-  .leftJoin("detail_barang", "barang.barangId", "detail_barang.id") // Join detail_barang table
-  .select(
-    "pengiriman.*", // Select all fields from pengiriman
-    knex.raw(`
-      COALESCE(
-        JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'id', barang.id, 
-            'namaBarang', detail_barang.nama,
-            'jumlahBarang', barang.jumlahBarang
-          )
-        ), 
-        '[]'
-      ) as barang
-    `) // Aggregate barang data into a JSON array
-  )
-  .groupBy("pengiriman.id") // Group by pengiriman.id to avoid duplication
-  .offset(offset)
-  .limit(limit)
-  .orderBy("pengiriman.tanggalKeberangkatan", "desc");
-
+      .leftJoin("barang", "pengiriman.id", "barang.pengirimanId")
+      .leftJoin("detail_barang", "barang.barangId", "detail_barang.id")
+      .select(
+        "pengiriman.*",
+        "barang.id as barangId",
+        "detail_barang.nama as namaBarang",
+        "barang.jumlahBarang"
+      )
+      .orderBy("pengiriman.tanggalKeberangkatan", "desc")
+      .offset(offset)
+      .limit(limit);
 
     // Apply filters to the query
-    if (filters.namaPengirim) {
-      baseQuery.where("pengiriman.namaPengirim", "like", `%${filters.namaPengirim}%`);
+    if (filters.namaPengirim && filters.namaPengirim.trim() !== "") {
+      baseQuery.where(
+        "pengiriman.namaPengirim",
+        "like",
+        `%${filters.namaPengirim}%`
+      );
     }
-    if (filters.namaPenerima) {
-      baseQuery.where("pengiriman.namaPenerima", "like", `%${filters.namaPenerima}%`);
+    if (filters.namaPenerima && filters.namaPenerima.trim() !== "") {
+      baseQuery.where(
+        "pengiriman.namaPenerima",
+        "like",
+        `%${filters.namaPenerima}%`
+      );
     }
-    if (filters.tanggalKeberangkatan) {
-      const tanggalKeberangkatan = new Date(filters.tanggalKeberangkatan);
-      baseQuery.where("pengiriman.tanggalKeberangkatan", "=", tanggalKeberangkatan);
+    if (
+      filters.tanggalKeberangkatan &&
+      filters.tanggalKeberangkatan.trim() !== ""
+    ) {
+      const tanggalKeberangkatan = filters.tanggalKeberangkatan;
+      // Use DATE() to match only the date part of the column
+      baseQuery.whereRaw("DATE(pengiriman.tanggalKeberangkatan) = ?", [
+        tanggalKeberangkatan,
+      ]);
     }
-    if (filters.totalHarga) {
-      baseQuery.where("pengiriman.totalHarga", "=", parseFloat(filters.totalHarga));
+
+    if (filters.totalHarga && filters.totalHarga.trim() !== "") {
+      baseQuery.where(
+        "pengiriman.totalHarga",
+        "=",
+        parseFloat(filters.totalHarga)
+      );
     }
-    if (filters.barangFilter) {
+    if (filters.barangFilter && filters.barangFilter.trim() !== "") {
       baseQuery.whereExists(function () {
         this.select("*")
           .from("barang")
@@ -60,20 +73,26 @@ export async function POST(request: NextRequest) {
 
     // Count total data
     const totalQuery = knex("pengiriman");
-    if (filters.namaPengirim) {
+    if (filters.namaPengirim && filters.namaPengirim.trim() !== "") {
       totalQuery.where("namaPengirim", "like", `%${filters.namaPengirim}%`);
     }
-    if (filters.namaPenerima) {
+    if (filters.namaPenerima && filters.namaPenerima.trim() !== "") {
       totalQuery.where("namaPenerima", "like", `%${filters.namaPenerima}%`);
     }
-    if (filters.tanggalKeberangkatan) {
-      const tanggalKeberangkatan = new Date(filters.tanggalKeberangkatan);
-      totalQuery.where("tanggalKeberangkatan", "=", tanggalKeberangkatan);
+    if (
+      filters.tanggalKeberangkatan &&
+      filters.tanggalKeberangkatan.trim() !== ""
+    ) {
+      const tanggalKeberangkatan = filters.tanggalKeberangkatan;
+      totalQuery.whereRaw("DATE(pengiriman.tanggalKeberangkatan) = ?", [
+        tanggalKeberangkatan,
+      ]);
     }
-    if (filters.totalHarga) {
+
+    if (filters.totalHarga && filters.totalHarga.trim() !== "") {
       totalQuery.where("totalHarga", "=", parseFloat(filters.totalHarga));
     }
-    if (filters.barangFilter) {
+    if (filters.barangFilter && filters.barangFilter.trim() !== "") {
       totalQuery.whereExists(function () {
         this.select("*")
           .from("barang")
@@ -86,13 +105,43 @@ export async function POST(request: NextRequest) {
     const [{ count }] = await totalQuery.count({ count: "*" });
 
     // Handle undefined count with default value
-    const totalCount = count
-      ? typeof count === "string"
-        ? parseInt(count)
-        : count
-      : 0;
+    const totalCount = count ? parseInt(count as string) : 0;
 
-    const pengirimanData = await baseQuery;
+    const pengirimanDataRaw = await baseQuery;
+
+    // Group the results and build the JSON structure
+    const pengirimanData: Pengiriman[] = pengirimanDataRaw.reduce(
+      (acc: Pengiriman[], row) => {
+        const existing = acc.find((item) => item.id === row.id);
+        if (existing) {
+          // Add barang to existing entry
+          existing.barang.push({
+            id: row.barangId,
+            barangId: row.barangId,
+            namaBarang: row.namaBarang,
+            jumlahBarang: row.jumlahBarang,
+            harga: row.harga, // Price of the barang
+          });
+        } else {
+          // Create a new entry
+          acc.push({
+            ...row,
+            barang: [
+              {
+                id: row.barangId,
+                namaBarang: row.namaBarang,
+                jumlahBarang: row.jumlahBarang,
+              },
+            ],
+          });
+        }
+        return acc;
+      },
+      []
+    );
+
+    // Log the base query for debugging
+    console.log("Generated Query:", baseQuery.toString());
 
     return NextResponse.json({
       totalData: totalCount,
