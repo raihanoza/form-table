@@ -384,6 +384,7 @@ const PengirimanTable: React.FC = () => {
     setPagination((prev) => ({
       ...prev,
       limit: newPageSize, // Atur limit baru
+      page: 1, // Reset to page 1
     }));
   };
 
