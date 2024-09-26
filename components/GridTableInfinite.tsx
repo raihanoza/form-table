@@ -36,10 +36,13 @@ const PengirimanTable: React.FC = () => {
   const limit = 20;
   const onGridReady = useCallback((params: GridReadyEvent) => {
     setGridApi(params.api); // Set the grid API
-
     const dataSource = {
       getRows: async (params: IGetRowsParams) => {
         const currentPageNumber = Math.floor(params.startRow / limit) + 1;
+
+        // Debugging: Log current pagination and request
+        console.log("Fetching rows for page:", currentPageNumber);
+
         const filterModel = params.filterModel; // Directly access filter model
         const selectedDate = filterModel?.tanggalKeberangkatan?.dateFrom;
         const formattedTanggal = selectedDate
@@ -53,6 +56,7 @@ const PengirimanTable: React.FC = () => {
           totalHarga: "", // Adjust if needed
           barangFilter: filterModel?.barang?.filter || "",
         };
+
         // Fetch data from the server
         const response = await fetch(`/api/infinite-scroll`, {
           method: "POST",
@@ -80,19 +84,6 @@ const PengirimanTable: React.FC = () => {
   }, []);
 
   const columns: ColDef<Pengiriman>[] = [
-    {
-      headerName: "No",
-      valueGetter: (params) => {
-        // Ensure params.node is defined and rowIndex is not null
-        if (params.node && params.node.rowIndex !== null) {
-          const currentPageNumber =
-            Math.floor(params.node.rowIndex / limit) + 1;
-          return (currentPageNumber - 1) * limit + params.node.rowIndex + 1; // Calculate the row number
-        }
-        return 0; // Return 0 or any default value if node is undefined or rowIndex is null
-      },
-      width: 80, // Adjust width as needed
-    },
     {
       headerName: "Nama Pengirim",
       field: "namaPengirim",
