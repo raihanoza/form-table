@@ -1,4 +1,4 @@
-"use client"; // Tambahkan ini di atas
+"use client";
 
 import PengirimanTable from "@/components/GridTable";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ const Page = () => {
     const checkSession = async () => {
       const session = await getSession();
       if (!session) {
-        router.push("/login"); // Redirect to login if not authenticated
+        router.push("/login");
       } else {
         setIsAuthorized(true);
       }
@@ -26,7 +26,7 @@ const Page = () => {
   }, [router]);
 
   if (isLoading) {
-    return <div>Loading...</div>; // Optionally, show a loading state
+    return <div>Loading...</div>;
   }
 
   return (

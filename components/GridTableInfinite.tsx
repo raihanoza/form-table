@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   ColDef,
@@ -10,6 +10,7 @@ import {
   CellPosition,
   RowClickedEvent,
   RowClassParams,
+  GridApi,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -43,7 +44,8 @@ interface FetchResponse {
 
 const PengirimanTable: React.FC = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
-  const [data, setData] = useState<FetchResponse | null>(null); // Change to null initially
+  const [data, setData] = useState<FetchResponse | null>(null);
+  const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
 
   const limit = 10;
 
@@ -52,7 +54,7 @@ const PengirimanTable: React.FC = () => {
       getRows: async (params: IGetRowsParams) => {
         const currentPageNumber = Math.floor(params.startRow / limit) + 1;
 
-        const filterModel = params.filterModel; // Directly access filter model
+        const filterModel = params.filterModel;
         const selectedDate = filterModel?.tanggalKeberangkatan?.dateFrom;
         const formattedTanggal = selectedDate
           ? new Date(selectedDate).toLocaleDateString("en-CA")
@@ -62,12 +64,11 @@ const PengirimanTable: React.FC = () => {
           namaPengirim: filterModel?.namaPengirim?.filter || "",
           namaPenerima: filterModel?.namaPenerima?.filter || "",
           tanggalKeberangkatan: formattedTanggal,
-          totalHarga: "", // Adjust if needed
+          totalHarga: "",
           barangFilter: filterModel?.barang?.filter || "",
         };
 
         try {
-          // Fetch data from the server
           const response = await fetch(`/api/infinite-scroll`, {
             method: "POST",
             headers: {
@@ -75,18 +76,18 @@ const PengirimanTable: React.FC = () => {
             },
             body: JSON.stringify({
               pagination: { page: currentPageNumber, limit },
-              filters, // Include the constructed filters
+              filters,
             }),
           });
 
-          const result: FetchResponse = await response.json(); // Extract data
-          setData(result); // Store data in state
+          const result: FetchResponse = await response.json();
+          setData(result);
 
-          const lastRow = result.totalData; // Set last row count
+          const lastRow = result.totalData;
           if (result.data.length) {
-            params.successCallback(result.data, lastRow); // Return fetched rows
+            params.successCallback(result.data, lastRow);
           } else {
-            params.failCallback(); // Handle failure
+            params.failCallback();
           }
         } catch (error) {
           console.error("Failed to fetch data", error);
@@ -124,28 +125,34 @@ const PengirimanTable: React.FC = () => {
       floatingFilter: true,
       valueGetter: (params: ValueGetterParams) => {
         const date = new Date(params?.data?.tanggalKeberangkatan);
-        return date.toLocaleDateString("id-ID"); // Format to Indonesian locale
+        return date.toLocaleDateString("id-ID");
       },
     },
   ];
-
-  const KEY_DOWN = "ArrowDown";
-  const KEY_UP = "ArrowUp";
 
   const navigateToNextCell = (
     params: NavigateToNextCellParams
   ): CellPosition | null => {
     const previousCell = params.previousCellPosition;
-    const totalRows = data?.data.length || 0;
+    const currentApi = gridApiRef.current;
 
-    if (!totalRows) return null; // Prevent navigation if no rows
+    const totalRows = data?.totalData || 0;
 
-    let nextRowIndex: number | null = null;
+    let nextRowIndex = previousCell.rowIndex;
 
     switch (params.key) {
-      case KEY_DOWN:
+      case "ArrowDown":
         nextRowIndex = previousCell.rowIndex + 1;
+
         if (nextRowIndex < totalRows) {
+          setFocusedRowIndex(nextRowIndex);
+
+          // Fallback for undefined currentPage and triggering page scroll
+          const currentPage = data?.currentPage || 1;
+          if (nextRowIndex >= limit * currentPage) {
+            currentApi?.paginationGoToNextPage();
+          }
+
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -154,9 +161,10 @@ const PengirimanTable: React.FC = () => {
         }
         break;
 
-      case KEY_UP:
+      case "ArrowUp":
         nextRowIndex = previousCell.rowIndex - 1;
         if (nextRowIndex >= 0) {
+          setFocusedRowIndex(nextRowIndex);
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -164,44 +172,18 @@ const PengirimanTable: React.FC = () => {
           };
         }
         break;
+
+      case "ArrowRight":
+      case "ArrowLeft":
+        return {
+          rowIndex: previousCell.rowIndex,
+          column: previousCell.column,
+          rowPinned: null,
+        };
     }
 
     return null;
   };
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const totalRows = data?.data.length || 0;
-
-    if (event.key === KEY_DOWN && focusedRowIndex < totalRows - 1) {
-      setFocusedRowIndex(focusedRowIndex + 1);
-    } else if (event.key === KEY_UP && focusedRowIndex > 0) {
-      setFocusedRowIndex(focusedRowIndex - 1);
-    }
-  };
-
-  useEffect(() => {
-    if (data && data.data.length > 0) {
-      setFocusedRowIndex(0);
-    }
-  }, [data]);
-
-  useEffect(() => {
-    const gridElement = document.querySelector(
-      ".ag-theme-alpine"
-    ) as HTMLElement;
-
-    if (gridElement) {
-      gridElement.setAttribute("tabindex", "0");
-      gridElement.addEventListener("keydown", handleKeyDown);
-      gridElement.focus();
-    }
-
-    return () => {
-      if (gridElement) {
-        gridElement.removeEventListener("keydown", handleKeyDown);
-      }
-    };
-  }, [focusedRowIndex]);
 
   const getRowClass = (params: RowClassParams) => {
     return params.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
@@ -212,6 +194,7 @@ const PengirimanTable: React.FC = () => {
       setFocusedRowIndex(event.rowIndex);
     }
   };
+
   const gridOptions: GridOptions<Pengiriman> = {
     defaultColDef: {
       editable: true,
@@ -220,9 +203,18 @@ const PengirimanTable: React.FC = () => {
       filter: true,
     },
     getRowClass,
-    navigateToNextCell,
+    navigateToNextCell, // Make sure this is included
     columnDefs: columns,
+    onGridReady: (params) => {
+      gridApiRef.current = params.api;
+    },
   };
+
+  useEffect(() => {
+    if (gridApiRef.current) {
+      gridApiRef.current.ensureIndexVisible(focusedRowIndex);
+    }
+  }, [focusedRowIndex]);
 
   return (
     <div className="ag-theme-alpine" style={{ height: 519, width: "100%" }}>
@@ -232,10 +224,11 @@ const PengirimanTable: React.FC = () => {
         cacheBlockSize={limit}
         maxBlocksInCache={10}
         onRowClicked={onRowClicked}
-        suppressCellFocus={true}
         animateRows={true}
+        navigateToNextCell={navigateToNextCell}
         onGridReady={onGridReady}
-        gridOptions={gridOptions}
+        suppressCellFocus={false} // Make sure cell focus is enabled
+        gridOptions={gridOptions} // Pass the entire gridOptions correctly
       />
     </div>
   );

@@ -84,7 +84,6 @@ body {
   }
 }
 .custom-row-focus  {
-  
   background-color: yellow !important; /* Choose your preferred color */
 }
 .pagination-container {
@@ -94,7 +93,7 @@ body {
   padding: 10px;
   /* background-color: #2a2d3e; */
   color: #fff;
-  border-top: 1px solid #444;
+  border-bottom: 1px solid #999;
 }
 
 .pagination-info {

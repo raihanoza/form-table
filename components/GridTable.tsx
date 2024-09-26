@@ -408,12 +408,11 @@ const PengirimanTable: React.FC = () => {
         getRowClass={getRowClass}
         onRowClicked={onRowClicked}
         // selectionColumnDef={}
-        suppressCellFocus={true}
+        navigateToNextCell={navigateToNextCell}
+        suppressCellFocus={false}
         onFilterChanged={handleFilterChanged}
       />
-      {/* Pagination Component */}
       <div className="pagination-container">
-        {/* Dropdown for page size */}
         <div className="pagination-controls">
           <span className="pagination-info">Page Size:</span>
           <select
