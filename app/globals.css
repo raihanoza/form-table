@@ -83,7 +83,53 @@ body {
     @apply bg-background text-foreground;
   }
 }
-.ag-row-focus  {
+.custom-row-focus  {
   
   background-color: yellow !important; /* Choose your preferred color */
+}
+.pagination-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 10px;
+  /* background-color: #2a2d3e; */
+  color: #fff;
+  border-top: 1px solid #444;
+}
+
+.pagination-info {
+  font-size: 14px;
+}
+
+.pagination-dropdown {
+  /* background-color: #3c3f51; */
+  border: 1px solid #444;
+  color: #444;
+  padding: 5px 10px;
+  margin: 0 5px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 14px;
+}
+
+.pagination-button:disabled {
+  /* background-color: #555; */
+  color: #888;
+  cursor: not-allowed;
+}
+
+.pagination-dropdown {
+  padding: 5px;
+  border-radius: 3px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+}
+
+.pagination-button-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }

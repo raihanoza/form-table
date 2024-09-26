@@ -1,22 +1,29 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { AgGridReact } from "ag-grid-react";
 import {
   CellPosition,
   ColDef,
+  GridApi,
   GridOptions,
   ICellRendererParams,
   NavigateToNextCellParams,
   RowClassParams,
+  RowClickedEvent,
   ValueGetterParams,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
-
+import {
+  MdKeyboardArrowLeft,
+  MdKeyboardArrowRight,
+  MdKeyboardDoubleArrowLeft,
+  MdKeyboardDoubleArrowRight,
+} from "react-icons/md";
 interface Barang {
   id: string;
   namaBarang: string;
@@ -72,6 +79,7 @@ const fetchPengiriman = async (
 const PengirimanTable: React.FC = () => {
   // const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+  const gridApiRef = useRef<GridApi<Pengiriman> | null>(null); // Use a ref to store the grid API
   console.log(focusedRowIndex);
   const [pagination, setPagination] = useState<{
     page: number;
@@ -105,21 +113,11 @@ const PengirimanTable: React.FC = () => {
       keepPreviousData: true,
     }
   );
-  // const fetchDetailBarang = async () => {
-  //   const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
-  //   if (!res.ok) throw new Error("Failed to fetch detail barang");
-  //   return res.json();
-  // };
-  // const { data: detailBarangOptions = [], isLoading:isLoadingDetail } = useQuery(
-  //   "detailBarang",
-  //   fetchDetailBarang
-  // );
   const router = useRouter();
 
   useEffect(() => {
-    // Refetch when pagination changes
     refetch();
-  }, [pagination.page, refetch]);
+  }, [pagination.page, pagination.limit, refetch]);
 
   const highlightText = (text: string, filter: string) => {
     if (!filter) return text;
@@ -167,15 +165,23 @@ const PengirimanTable: React.FC = () => {
       year: "numeric",
     }).format(date);
   };
-
-  // const formatBarang = (barang: Barang[] | undefined) => {
-  //   if (!barang) return ""; // Handle undefined barang
-  //   return barang
-  //     .map((item) => `${item.namaBarang} (${item.jumlahBarang} pcs)`)
-  //     .join(", ");
-  // };
-
   const columns: ColDef<Pengiriman>[] = [
+    {
+      headerName: "No",
+      width: 70,
+      maxWidth: 70,
+      valueGetter: (params) => {
+        // Use optional chaining to safely access rowIndex
+        const rowIndex = params.node?.rowIndex ?? -1; // Fallback to -1 if null
+
+        return rowIndex >= 0
+          ? (pagination.page - 1) * pagination.limit + (rowIndex + 1)
+          : ""; // Return an empty string if rowIndex is invalid
+      },
+      filter: false,
+      // width: 10, // Adjust width as needed
+      cellClass: "text-center",
+    },
     {
       headerName: "Nama Pengirim",
       field: "namaPengirim",
@@ -208,15 +214,6 @@ const PengirimanTable: React.FC = () => {
       cellRenderer: (params: ValueGetterParams) =>
         formatDate(params.data.tanggalKeberangkatan),
     },
-    // {
-    //   headerName: "Barang",
-    //   field: "barang",
-    //   filter: "agTextColumnFilter", // Adding a text filter for barang
-    //   floatingFilter: true,
-    //   valueGetter: (params) => formatBarang(params?.data?.barang),
-    //   cellRenderer: (params: ValueGetterParams) =>
-    //     highlightText(formatBarang(params.data.barang), filters.barangFilter),
-    // },
     {
       headerName: "Actions",
       cellRenderer: (params: ICellRendererParams) => (
@@ -255,7 +252,7 @@ const PengirimanTable: React.FC = () => {
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
-            rowPinned: null, // Add this line
+            rowPinned: null,
           };
         }
         break;
@@ -267,22 +264,21 @@ const PengirimanTable: React.FC = () => {
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
-            rowPinned: null, // Add this line
+            rowPinned: null,
           };
         }
         break;
 
       case KEY_RIGHT:
       case KEY_LEFT:
-        // For horizontal navigation, just stay in the same row
         return {
           rowIndex: previousCell.rowIndex,
           column: previousCell.column,
-          rowPinned: null, // Add this line
+          rowPinned: null,
         };
     }
 
-    return null; // Return null if navigation is not possible
+    return null;
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -325,13 +321,18 @@ const PengirimanTable: React.FC = () => {
         gridElement.removeEventListener("keydown", handleKeyDown);
       }
     };
-  }, [focusedRowIndex, data]); // Re-apply when focusedRowIndex or data changes
+  }, [focusedRowIndex]); // Re-apply when focusedRowIndex changes
 
   // Ensure to highlight the focused row
   const getRowClass = (params: RowClassParams) => {
-    return params.rowIndex === focusedRowIndex ? "ag-row-focus" : "";
+    return params.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
   };
 
+  const onRowClicked = (event: RowClickedEvent) => {
+    if (event.rowIndex !== null) {
+      setFocusedRowIndex(event.rowIndex);
+    }
+  };
   const gridOptions: GridOptions<Pengiriman> = {
     defaultColDef: {
       editable: true,
@@ -341,7 +342,10 @@ const PengirimanTable: React.FC = () => {
     },
     navigateToNextCell,
     columnDefs: columns,
-    getRowClass, // Make sure this is included
+    getRowClass,
+    onGridReady: (params) => {
+      gridApiRef.current = params.api; // Store the grid API in the ref
+    },
   };
 
   const handleFilterChanged = (event: {
@@ -364,6 +368,10 @@ const PengirimanTable: React.FC = () => {
       totalHarga: filters.totalHarga, // Keep the existing totalHarga filter
       barangFilter: filterModel.barang?.filter ?? "", // Capture the filter for barang
     });
+    setPagination((prev) => ({
+      ...prev,
+      page: 1, // Reset to page 1
+    }));
   };
 
   const handlePageChange = (newPage: number) => {
@@ -374,44 +382,96 @@ const PengirimanTable: React.FC = () => {
       }));
     }
   };
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPagination((prev) => ({
+      ...prev,
+      limit: newPageSize, // Atur limit baru
+    }));
+  };
 
   const totalPages = data ? Math.ceil(data.totalData / pagination.limit) : 0;
+  useEffect(() => {
+    if (gridApiRef.current) {
+      gridApiRef.current.ensureIndexVisible(focusedRowIndex); // Ensure the row is visible
+    }
+  }, [focusedRowIndex]);
 
   if (isLoading) return <div>Loading...</div>;
   if (isError) return <div>Error loading data</div>;
 
   return (
-    <div className="ag-theme-alpine" style={{ height: 600, width: "100%" }}>
+    <div className="ag-theme-alpine" style={{ height: 519, width: "100%" }}>
       <AgGridReact
         rowData={data?.data || []}
         columnDefs={columns}
         paginationPageSize={pagination.limit}
         gridOptions={{ ...gridOptions, getRowClass }}
         getRowClass={getRowClass}
-        rowModelType="infinite"
+        onRowClicked={onRowClicked}
         // selectionColumnDef={}
         suppressCellFocus={true}
         onFilterChanged={handleFilterChanged}
       />
       {/* Pagination Component */}
-      <div style={{ marginTop: "10px" }}>
-        <Button
-          style={{ marginRight: "5px" }}
-          disabled={pagination.page === 1}
-          onClick={() => handlePageChange(pagination.page - 1)}
-        >
-          Previous
-        </Button>
-        <span>
-          Page {pagination.page} of {totalPages}
-        </span>
-        <Button
-          style={{ marginLeft: "5px" }}
-          disabled={pagination.page === totalPages}
-          onClick={() => handlePageChange(pagination.page + 1)}
-        >
-          Next
-        </Button>
+      <div className="pagination-container">
+        {/* Dropdown for page size */}
+        <div className="pagination-controls">
+          <span className="pagination-info">Page Size:</span>
+          <select
+            className="pagination-dropdown"
+            value={pagination.limit}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+
+        {/* Display page range and total count */}
+        {/* <div className="pagination-info">
+        {pagination.start} to {pagination.end} of {pagination.totalItems}
+      </div> */}
+
+        {/* Page navigation buttons */}
+        <div className="pagination-controls gap-2">
+          <Button
+            variant="link"
+            className="pagination-button pagination-button-icon"
+            onClick={() => handlePageChange(1)}
+            disabled={pagination.page === 1}
+          >
+            <MdKeyboardDoubleArrowLeft className="text-2xl text-zinc-700" />
+          </Button>
+          <Button
+            variant="link"
+            className="pagination-button pagination-button-icon"
+            onClick={() => handlePageChange(pagination.page - 1)}
+            disabled={pagination.page === 1}
+          >
+            <MdKeyboardArrowLeft className="text-2xl text-zinc-700" />
+          </Button>
+          <span className="pagination-info text-zinc-700">
+            Page {pagination.page} of {totalPages}
+          </span>
+          <Button
+            variant="link"
+            className="pagination-button pagination-button-icon"
+            onClick={() => handlePageChange(pagination.page + 1)}
+            disabled={pagination.page === totalPages}
+          >
+            <MdKeyboardArrowRight className="text-2xl text-zinc-700" />
+          </Button>
+          <Button
+            variant="link"
+            className="pagination-button pagination-button-icon"
+            onClick={() => handlePageChange(totalPages)}
+            disabled={pagination.page === totalPages}
+          >
+            <MdKeyboardDoubleArrowRight className="text-2xl text-zinc-700" />
+          </Button>
+        </div>
       </div>
     </div>
   );

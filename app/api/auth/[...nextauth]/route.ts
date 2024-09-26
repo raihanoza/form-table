@@ -1,6 +1,6 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import db from '../../../../knex'; // Adjust the import according to your setup
+import db from '../../../../knex'; // Sesuaikan dengan setup-mu
 import bcrypt from 'bcryptjs';
 
 const authOptions = {
@@ -31,12 +31,18 @@ const authOptions = {
       },
     }),
   ],
-  pages: {
-    signIn: '/login', // Custom sign-in page
+  session: {
+    strategy: 'jwt' as const, // Specify "jwt" explicitly, ensuring type safety
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  jwt: {
+    secret: process.env.NEXTAUTH_SECRET, // Gunakan variabel environment untuk secret JWT
+  },
+  pages: {
+    signIn: '/login', // Halaman login custom
+  },
+  secret: process.env.NEXTAUTH_SECRET, // Secret yang sama digunakan untuk NextAuth secara umum
 };
 
-// Export the NextAuth handler
-const handler = NextAuth(authOptions)
-export {handler as GET, handler as POST}
+// Ekspor handler NextAuth
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
