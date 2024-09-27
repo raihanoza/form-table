@@ -11,6 +11,7 @@ import {
   RowClickedEvent,
   RowClassParams,
   GridApi,
+  CellFocusedEvent,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -53,6 +54,8 @@ const PengirimanTable: React.FC = () => {
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     const api = params.api; // Ambil api dari event onGridReady
+    gridApiRef.current = params.api; // Simpan api grid
+
     const dataSource = {
       getRows: async (params: IGetRowsParams) => {
         const currentPageNumber = Math.floor(params.startRow / limit) + 1;
@@ -137,6 +140,7 @@ const PengirimanTable: React.FC = () => {
       },
     },
   ];
+
   const navigateToNextCell = (
     params: NavigateToNextCellParams
   ): CellPosition | null => {
@@ -147,16 +151,20 @@ const PengirimanTable: React.FC = () => {
     const visibleRowCount = currentApi?.getDisplayedRowCount() || 10;
 
     let nextRowIndex = previousCell.rowIndex;
-
-    // Simpan nilai relativeRowIndex ke dalam useRef
     relativeRowIndexRef.current = previousCell.rowIndex % visibleRowCount;
 
     switch (params.key) {
       case "ArrowDown":
         nextRowIndex = previousCell.rowIndex + 1;
+
+        // Pastikan tidak melewati batas jumlah total row
         if (nextRowIndex < totalRows) {
           setFocusedRowIndex(nextRowIndex);
-          currentApi?.ensureIndexVisible(nextRowIndex, "bottom");
+
+          // Fokus baris berikutnya dan pastikan terlihat di tengah layar
+          currentApi?.ensureIndexVisible(nextRowIndex, "middle");
+          currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
+
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -167,9 +175,15 @@ const PengirimanTable: React.FC = () => {
 
       case "ArrowUp":
         nextRowIndex = previousCell.rowIndex - 1;
+
+        // Pastikan tidak melewati baris paling atas
         if (nextRowIndex >= 0) {
           setFocusedRowIndex(nextRowIndex);
-          currentApi?.ensureIndexVisible(nextRowIndex, "top");
+
+          // Fokus baris sebelumnya dan pastikan terlihat di tengah layar
+          currentApi?.ensureIndexVisible(nextRowIndex, "middle");
+          currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
+
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -183,15 +197,13 @@ const PengirimanTable: React.FC = () => {
           currentApi?.paginationGoToNextPage();
 
           setTimeout(() => {
-            setFocusedRowIndex(relativeRowIndexRef.current); // Ambil nilai dari useRef
-            currentApi?.setFocusedCell(
-              relativeRowIndexRef.current,
-              previousCell.column
-            );
-            currentApi?.ensureIndexVisible(
-              relativeRowIndexRef.current,
-              "bottom"
-            );
+            const newFocusedIndex =
+              relativeRowIndexRef.current +
+              previousCell.rowIndex -
+              (previousCell.rowIndex % visibleRowCount);
+            setFocusedRowIndex(newFocusedIndex);
+            currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
+            currentApi?.ensureIndexVisible(newFocusedIndex, "middle");
           }, 100);
 
           return {
@@ -207,12 +219,13 @@ const PengirimanTable: React.FC = () => {
           currentApi?.paginationGoToPreviousPage();
 
           setTimeout(() => {
-            setFocusedRowIndex(relativeRowIndexRef.current); // Ambil nilai dari useRef
-            currentApi?.setFocusedCell(
-              relativeRowIndexRef.current,
-              previousCell.column
-            );
-            currentApi?.ensureIndexVisible(relativeRowIndexRef.current, "top");
+            const newFocusedIndex =
+              relativeRowIndexRef.current +
+              previousCell.rowIndex -
+              (previousCell.rowIndex % visibleRowCount);
+            setFocusedRowIndex(newFocusedIndex);
+            currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
+            currentApi?.ensureIndexVisible(newFocusedIndex, "middle");
           }, 100);
 
           return {
@@ -222,21 +235,13 @@ const PengirimanTable: React.FC = () => {
           };
         }
         break;
-
-      case "ArrowRight":
-      case "ArrowLeft":
-        return {
-          rowIndex: previousCell.rowIndex,
-          column: previousCell.column,
-          rowPinned: null,
-        };
     }
 
     return null;
   };
 
   const getRowClass = (params: RowClassParams) => {
-    return params.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
+    return params.node.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
   };
 
   const onRowClicked = (event: RowClickedEvent) => {
@@ -259,17 +264,18 @@ const PengirimanTable: React.FC = () => {
       gridApiRef.current = params.api;
     },
   };
+
   useEffect(() => {
     if (data && data.data.length > 0 && gridApiRef.current) {
       gridApiRef.current.setFocusedCell(0, "namaPengirim"); // Assuming you want to focus on 'namaPengirim' column
     }
   }, [data]);
+
   useEffect(() => {
     if (gridApiRef.current) {
       gridApiRef.current.addEventListener("paginationChanged", () => {
         const currentApi = gridApiRef.current;
         if (currentApi) {
-          // Set fokus ke baris yang sama relatif di halaman baru
           setFocusedRowIndex(relativeRowIndexRef.current);
           currentApi.setFocusedCell(
             relativeRowIndexRef.current,
@@ -279,7 +285,9 @@ const PengirimanTable: React.FC = () => {
       });
     }
   }, []);
-
+  const onCellFocused = (event: CellFocusedEvent) => {
+    setFocusedRowIndex(event.rowIndex ?? 0);
+  };
   if (data === undefined) {
     return <div>Loading...</div>;
   }
@@ -290,6 +298,7 @@ const PengirimanTable: React.FC = () => {
         columnDefs={columns}
         rowModelType="infinite"
         cacheBlockSize={limit}
+        onCellFocused={onCellFocused}
         maxBlocksInCache={10}
         getRowClass={getRowClass}
         onRowClicked={onRowClicked}

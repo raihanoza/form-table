@@ -286,7 +286,7 @@ const PengirimanTable: React.FC = () => {
     if (event.key === "ArrowDown" && focusedRowIndex < totalRows - 1) {
       setFocusedRowIndex((prev) => prev);
     } else if (event.key === "ArrowUp" && focusedRowIndex > 0) {
-      setFocusedRowIndex((prev) => prev - 1);
+      setFocusedRowIndex((prev) => prev);
     }
     // Handle page navigation
     if (event.key === "PageDown") {
