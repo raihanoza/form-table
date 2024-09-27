@@ -83,9 +83,10 @@ body {
     @apply bg-background text-foreground;
   }
 }
-.custom-row-focus  {
-  background-color: yellow !important; /* Choose your preferred color */
+.custom-row-focus {
+  background-color: rgb(244, 244, 47) !important; /* Warna latar belakang fokus */
 }
+
 .pagination-container {
   display: flex;
   align-items: flex-end;

@@ -80,6 +80,7 @@ const PengirimanTable: React.FC = () => {
   // const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
+  const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
   const [pagination, setPagination] = useState<{
     page: number;
     limit: number;
@@ -282,44 +283,38 @@ const PengirimanTable: React.FC = () => {
   const handleKeyDown = (event: KeyboardEvent) => {
     const totalRows = data?.data.length || 0;
 
-    // Update focusedRowIndex based on Arrow keys
     if (event.key === "ArrowDown" && focusedRowIndex < totalRows - 1) {
-      setFocusedRowIndex((prev) => prev + 1);
+      setFocusedRowIndex((prev) => prev);
     } else if (event.key === "ArrowUp" && focusedRowIndex > 0) {
       setFocusedRowIndex((prev) => prev - 1);
     }
+    // Handle page navigation
     if (event.key === "PageDown") {
-      handlePageChange(pagination.page + 1);
+      if (pagination.page < totalPages) {
+        handlePageChange(pagination.page + 1);
+      }
     } else if (event.key === "PageUp") {
-      handlePageChange(pagination.page - 1);
+      if (pagination.page > 1) {
+        handlePageChange(pagination.page - 1);
+      }
     }
   };
 
   useEffect(() => {
-    // Check if data and data.data are defined and if data.data has items
-    if (data && data.data && data.data.length > 0) {
-      setFocusedRowIndex(0); // Reset to the first row
+    if (data && data.data.length > 0 && gridApiRef.current) {
+      gridApiRef.current.setFocusedCell(0, "namaPengirim"); // Assuming you want to focus on 'namaPengirim' column
     }
   }, [data]);
-
   // console.log(focusedRowIndex)
   useEffect(() => {
-    const gridElement = document.querySelector(
-      ".ag-theme-alpine"
-    ) as HTMLElement;
+    const gridElement = document.querySelector(".ag-row-first") as HTMLElement;
 
     if (gridElement) {
       gridElement.setAttribute("tabindex", "0"); // Make the grid focusable
-      gridElement.addEventListener("keydown", handleKeyDown);
-      gridElement.focus(); // Ensure the grid is focused on mount
+      gridElement.focus(); // Focus on the grid element to allow keyboard navigation
+      gridElement.click(); // Focus on the grid element to allow keyboard navigation
     }
-
-    return () => {
-      if (gridElement) {
-        gridElement.removeEventListener("keydown", handleKeyDown);
-      }
-    };
-  }, [focusedRowIndex]); // Re-apply when focusedRowIndex changes
+  }, []);
 
   // Ensure to highlight the focused row
   const getRowClass = (params: RowClassParams) => {
@@ -343,6 +338,8 @@ const PengirimanTable: React.FC = () => {
     getRowClass,
     onGridReady: (params) => {
       gridApiRef.current = params.api; // Store the grid API in the ref
+      // Set focus on the first cell
+      params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
     },
   };
 
@@ -380,6 +377,7 @@ const PengirimanTable: React.FC = () => {
       }));
     }
   };
+
   const handlePageSizeChange = (newPageSize: number) => {
     setPagination((prev) => ({
       ...prev,
@@ -391,16 +389,34 @@ const PengirimanTable: React.FC = () => {
   const totalPages = data ? Math.ceil(data.totalData / pagination.limit) : 0;
   useEffect(() => {
     if (gridApiRef.current) {
-      gridApiRef.current.ensureIndexVisible(focusedRowIndex); // Ensure the row is visible
+      gridApiRef.current.ensureIndexVisible(focusedRowIndex); // Ensure the focused row is visible
     }
   }, [focusedRowIndex]);
+
+  useEffect(() => {
+    const gridElement = document.querySelector(
+      ".ag-theme-alpine"
+    ) as HTMLElement;
+
+    if (gridElement) {
+      gridElement.addEventListener("keydown", handleKeyDown); // Ensure grid listens for key events
+      return () => {
+        gridElement.removeEventListener("keydown", handleKeyDown); // Cleanup listener on unmount
+      };
+    }
+  }, [focusedRowIndex, pagination.page]);
 
   if (isLoading) return <div>Loading...</div>;
   if (isError) return <div>Error loading data</div>;
 
   return (
-    <div className="ag-theme-alpine" style={{ height: 519, width: "100%" }}>
+    <div
+      tabIndex={0} // Ensure the grid is focusable
+      className="ag-theme-alpine"
+      style={{ height: 519, width: "100%" }}
+    >
       <AgGridReact
+        ref={gridRef} // Set the gridRef to AgGridReact
         rowData={data?.data || []}
         columnDefs={columns}
         paginationPageSize={pagination.limit}

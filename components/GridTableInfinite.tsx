@@ -44,6 +44,8 @@ interface FetchResponse {
 
 const PengirimanTable: React.FC = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+  const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
+
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
 
@@ -95,6 +97,7 @@ const PengirimanTable: React.FC = () => {
         }
       },
     };
+    params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
 
     params.api.setGridOption("datasource", dataSource);
   }, []);
@@ -129,7 +132,6 @@ const PengirimanTable: React.FC = () => {
       },
     },
   ];
-
   const navigateToNextCell = (
     params: NavigateToNextCellParams
   ): CellPosition | null => {
@@ -137,6 +139,7 @@ const PengirimanTable: React.FC = () => {
     const currentApi = gridApiRef.current;
 
     const totalRows = data?.totalData || 0;
+    const visibleRowCount = currentApi?.getDisplayedRowCount() || 10; // Jumlah baris yang terlihat di grid
 
     let nextRowIndex = previousCell.rowIndex;
 
@@ -146,8 +149,8 @@ const PengirimanTable: React.FC = () => {
 
         if (nextRowIndex < totalRows) {
           setFocusedRowIndex(nextRowIndex);
+          currentApi?.ensureIndexVisible(nextRowIndex, "bottom");
 
-          // Fallback for undefined currentPage and triggering page scroll
           const currentPage = data?.currentPage || 1;
           if (nextRowIndex >= limit * currentPage) {
             currentApi?.paginationGoToNextPage();
@@ -165,6 +168,42 @@ const PengirimanTable: React.FC = () => {
         nextRowIndex = previousCell.rowIndex - 1;
         if (nextRowIndex >= 0) {
           setFocusedRowIndex(nextRowIndex);
+          currentApi?.ensureIndexVisible(nextRowIndex, "top");
+
+          return {
+            rowIndex: nextRowIndex,
+            column: previousCell.column,
+            rowPinned: null,
+          };
+        }
+        break;
+
+      case "PageDown":
+        nextRowIndex = previousCell.rowIndex + visibleRowCount;
+        if (nextRowIndex < totalRows) {
+          setFocusedRowIndex(nextRowIndex);
+          currentApi?.ensureIndexVisible(nextRowIndex, "bottom");
+
+          // Pindah ke halaman berikutnya jika melebihi batas halaman
+          const currentPage = data?.currentPage || 1;
+          if (nextRowIndex >= limit * currentPage) {
+            currentApi?.paginationGoToNextPage();
+          }
+
+          return {
+            rowIndex: nextRowIndex,
+            column: previousCell.column,
+            rowPinned: null,
+          };
+        }
+        break;
+
+      case "PageUp":
+        nextRowIndex = previousCell.rowIndex - visibleRowCount;
+        if (nextRowIndex >= 0) {
+          setFocusedRowIndex(nextRowIndex);
+          currentApi?.ensureIndexVisible(nextRowIndex, "top");
+
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -207,22 +246,35 @@ const PengirimanTable: React.FC = () => {
     columnDefs: columns,
     onGridReady: (params) => {
       gridApiRef.current = params.api;
+      setTimeout(() => {
+        params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
+        params.api.getRowNode("0")?.setSelected(true); // Select the first row
+        params.api.ensureIndexVisible(0); // Ensure the first row is visible
+      }, 0); // Timeout to ensure it runs after rendering
     },
   };
-
+  useEffect(() => {
+    if (data && data.data.length > 0 && gridApiRef.current) {
+      gridApiRef.current.setFocusedCell(0, "namaPengirim"); // Assuming you want to focus on 'namaPengirim' column
+    }
+  }, [data]);
   useEffect(() => {
     if (gridApiRef.current) {
-      gridApiRef.current.ensureIndexVisible(focusedRowIndex);
+      gridApiRef.current.ensureIndexVisible(focusedRowIndex, "middle");
     }
   }, [focusedRowIndex]);
-
+  if (data === undefined) {
+    return <div>Loading...</div>;
+  }
   return (
     <div className="ag-theme-alpine" style={{ height: 519, width: "100%" }}>
       <AgGridReact
+        ref={gridRef}
         columnDefs={columns}
         rowModelType="infinite"
         cacheBlockSize={limit}
         maxBlocksInCache={10}
+        getRowClass={getRowClass}
         onRowClicked={onRowClicked}
         animateRows={true}
         navigateToNextCell={navigateToNextCell}

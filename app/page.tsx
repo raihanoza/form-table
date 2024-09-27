@@ -40,7 +40,12 @@ const Page = () => {
         >
           Tambah Pengiriman
         </Button>
-        <Button onClick={() => signOut()}>Log-Out</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => router.push("/infinite-scroll")}>
+            Infinite Scroll
+          </Button>
+          <Button onClick={() => signOut()}>Log-Out</Button>
+        </div>
       </div>
 
       {isAuthorized && <PengirimanTable />}
