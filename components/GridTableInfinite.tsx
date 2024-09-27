@@ -50,7 +50,7 @@ const PengirimanTable: React.FC = () => {
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
 
-  const limit = 10;
+  const limit = 500;
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     const api = params.api; // Ambil api dari event onGridReady
