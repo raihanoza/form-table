@@ -45,13 +45,14 @@ interface FetchResponse {
 const PengirimanTable: React.FC = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
   const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
-
+  const relativeRowIndexRef = useRef<number>(0); // Ref untuk simpan relativeRowIndex
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
 
   const limit = 10;
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
+    const api = params.api; // Ambil api dari event onGridReady
     const dataSource = {
       getRows: async (params: IGetRowsParams) => {
         const currentPageNumber = Math.floor(params.startRow / limit) + 1;
@@ -98,7 +99,11 @@ const PengirimanTable: React.FC = () => {
       },
     };
     params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
-
+    setTimeout(() => {
+      api.setFocusedCell(0, "namaPengirim");
+      api.getRowNode("0")?.setSelected(true); // Pilih baris pertama
+      api.ensureIndexVisible(0, "middle"); // Pastikan baris pertama terlihat
+    }, 0); // Timeout untuk memastikan grid sudah dirender
     params.api.setGridOption("datasource", dataSource);
   }, []);
 
@@ -139,23 +144,19 @@ const PengirimanTable: React.FC = () => {
     const currentApi = gridApiRef.current;
 
     const totalRows = data?.totalData || 0;
-    const visibleRowCount = currentApi?.getDisplayedRowCount() || 10; // Jumlah baris yang terlihat di grid
+    const visibleRowCount = currentApi?.getDisplayedRowCount() || 10;
 
     let nextRowIndex = previousCell.rowIndex;
+
+    // Simpan nilai relativeRowIndex ke dalam useRef
+    relativeRowIndexRef.current = previousCell.rowIndex % visibleRowCount;
 
     switch (params.key) {
       case "ArrowDown":
         nextRowIndex = previousCell.rowIndex + 1;
-
         if (nextRowIndex < totalRows) {
           setFocusedRowIndex(nextRowIndex);
           currentApi?.ensureIndexVisible(nextRowIndex, "bottom");
-
-          const currentPage = data?.currentPage || 1;
-          if (nextRowIndex >= limit * currentPage) {
-            currentApi?.paginationGoToNextPage();
-          }
-
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -169,7 +170,6 @@ const PengirimanTable: React.FC = () => {
         if (nextRowIndex >= 0) {
           setFocusedRowIndex(nextRowIndex);
           currentApi?.ensureIndexVisible(nextRowIndex, "top");
-
           return {
             rowIndex: nextRowIndex,
             column: previousCell.column,
@@ -179,16 +179,20 @@ const PengirimanTable: React.FC = () => {
         break;
 
       case "PageDown":
-        nextRowIndex = previousCell.rowIndex + visibleRowCount;
-        if (nextRowIndex < totalRows) {
-          setFocusedRowIndex(nextRowIndex);
-          currentApi?.ensureIndexVisible(nextRowIndex, "bottom");
+        if (previousCell.rowIndex + visibleRowCount < totalRows) {
+          currentApi?.paginationGoToNextPage();
 
-          // Pindah ke halaman berikutnya jika melebihi batas halaman
-          const currentPage = data?.currentPage || 1;
-          if (nextRowIndex >= limit * currentPage) {
-            currentApi?.paginationGoToNextPage();
-          }
+          setTimeout(() => {
+            setFocusedRowIndex(relativeRowIndexRef.current); // Ambil nilai dari useRef
+            currentApi?.setFocusedCell(
+              relativeRowIndexRef.current,
+              previousCell.column
+            );
+            currentApi?.ensureIndexVisible(
+              relativeRowIndexRef.current,
+              "bottom"
+            );
+          }, 100);
 
           return {
             rowIndex: nextRowIndex,
@@ -199,10 +203,17 @@ const PengirimanTable: React.FC = () => {
         break;
 
       case "PageUp":
-        nextRowIndex = previousCell.rowIndex - visibleRowCount;
-        if (nextRowIndex >= 0) {
-          setFocusedRowIndex(nextRowIndex);
-          currentApi?.ensureIndexVisible(nextRowIndex, "top");
+        if (previousCell.rowIndex - visibleRowCount >= 0) {
+          currentApi?.paginationGoToPreviousPage();
+
+          setTimeout(() => {
+            setFocusedRowIndex(relativeRowIndexRef.current); // Ambil nilai dari useRef
+            currentApi?.setFocusedCell(
+              relativeRowIndexRef.current,
+              previousCell.column
+            );
+            currentApi?.ensureIndexVisible(relativeRowIndexRef.current, "top");
+          }, 100);
 
           return {
             rowIndex: nextRowIndex,
@@ -246,11 +257,6 @@ const PengirimanTable: React.FC = () => {
     columnDefs: columns,
     onGridReady: (params) => {
       gridApiRef.current = params.api;
-      setTimeout(() => {
-        params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
-        params.api.getRowNode("0")?.setSelected(true); // Select the first row
-        params.api.ensureIndexVisible(0); // Ensure the first row is visible
-      }, 0); // Timeout to ensure it runs after rendering
     },
   };
   useEffect(() => {
@@ -260,9 +266,20 @@ const PengirimanTable: React.FC = () => {
   }, [data]);
   useEffect(() => {
     if (gridApiRef.current) {
-      gridApiRef.current.ensureIndexVisible(focusedRowIndex, "middle");
+      gridApiRef.current.addEventListener("paginationChanged", () => {
+        const currentApi = gridApiRef.current;
+        if (currentApi) {
+          // Set fokus ke baris yang sama relatif di halaman baru
+          setFocusedRowIndex(relativeRowIndexRef.current);
+          currentApi.setFocusedCell(
+            relativeRowIndexRef.current,
+            "namaPengirim"
+          );
+        }
+      });
     }
-  }, [focusedRowIndex]);
+  }, []);
+
   if (data === undefined) {
     return <div>Loading...</div>;
   }
