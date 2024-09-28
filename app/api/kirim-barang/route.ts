@@ -24,15 +24,15 @@ export async function POST(request: NextRequest) {
   try {
     // Parse and validate the incoming request body
     const {
-      namaPengirim,nohpPengirim,alamatPengirim,
-      namaPenerima,alamatPenerima,nohpPenerima,
+      namaPengirim, nohpPengirim, alamatPengirim,
+      namaPenerima, alamatPenerima, nohpPenerima,
       tanggalKeberangkatan,
       totalHarga,
       barang,
     }: PengirimanRequest = await request.json();
 
     // Basic validation
-    if (!namaPengirim || !namaPenerima || !tanggalKeberangkatan ||!nohpPengirim||!alamatPengirim||!alamatPenerima||!nohpPenerima|| !barang || !barang.length) {
+    if (!namaPengirim || !namaPengirim || !tanggalKeberangkatan || !nohpPengirim || !alamatPengirim || !alamatPenerima || !nohpPenerima || !barang || !barang.length) {
       return NextResponse.json(
         { error: "Missing required fields or no items in barang" },
         { status: 400 }
@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Use transaction to insert into both `pengiriman` and `barang`
-    await knex.transaction(async (trx) => {
+    const insertedPengirimanData = await knex.transaction(async (trx) => {
       // Insert into the `pengiriman` table
       const [pengirimanId] = await trx("pengiriman")
         .insert({
-          namaPengirim,nohpPengirim,alamatPengirim,
-      namaPenerima,alamatPenerima,nohpPenerima,
+          namaPengirim, nohpPengirim, alamatPengirim,
+          namaPenerima, alamatPenerima, nohpPenerima,
           tanggalKeberangkatan: new Date(tanggalKeberangkatan), // Parse the date
           totalHarga: parseFloat(totalHarga.toString()), // Ensure totalHarga is a float
         })
@@ -60,10 +60,29 @@ export async function POST(request: NextRequest) {
       }));
 
       await trx("barang").insert(barangData);
+
+      // Return the inserted pengiriman and barang data
+      return {
+        pengirimanId,
+        pengiriman: {
+          namaPengirim,
+          nohpPengirim,
+          alamatPengirim,
+          namaPenerima,
+          alamatPenerima,
+          nohpPenerima,
+          tanggalKeberangkatan,
+          totalHarga,
+          barang: barangData,
+        },
+      };
     });
 
     // Success response
-    return NextResponse.json({ message: "Pengiriman berhasil ditambahkan" });
+    return NextResponse.json({
+      message: "Pengiriman berhasil ditambahkan",
+      data: insertedPengirimanData,
+    });
   } catch (error) {
     console.error("Error inserting pengiriman:", error);
     return NextResponse.json(

@@ -492,3 +492,101 @@ const PengirimanTable: React.FC = () => {
 };
 
 export default PengirimanTable;
+// const navigateToNextCell = (
+//   params: NavigateToNextCellParams
+// ): CellPosition | null => {
+//   const previousCell = params.previousCellPosition;
+//   const currentApi = gridApiRef.current;
+
+//   const totalRows = data?.totalData || 0;
+//   const visibleRowCount = currentApi?.getDisplayedRowCount() || 10;
+
+//   let nextRowIndex = previousCell.rowIndex;
+//   relativeRowIndexRef.current = previousCell.rowIndex % visibleRowCount;
+
+//   switch (params.key) {
+//     case "ArrowDown":
+//       nextRowIndex = previousCell.rowIndex + 1;
+
+//       // Pastikan tidak melewati batas jumlah total row
+//       if (nextRowIndex < totalRows) {
+//         setFocusedRowIndex(nextRowIndex);
+
+//         // Fokus baris berikutnya dan pastikan terlihat di tengah layar
+//         currentApi?.ensureIndexVisible(nextRowIndex);
+//         currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
+
+//         return {
+//           rowIndex: nextRowIndex,
+//           column: previousCell.column,
+//           rowPinned: null,
+//         };
+//       }
+//       break;
+
+//     case "ArrowUp":
+//       nextRowIndex = previousCell.rowIndex - 1;
+
+//       // Pastikan tidak melewati baris paling atas
+//       if (nextRowIndex >= 0) {
+//         setFocusedRowIndex(nextRowIndex);
+
+//         // Fokus baris sebelumnya dan pastikan terlihat di tengah layar
+//         currentApi?.ensureIndexVisible(nextRowIndex);
+//         currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
+
+//         return {
+//           rowIndex: nextRowIndex,
+//           column: previousCell.column,
+//           rowPinned: null,
+//         };
+//       }
+//       break;
+
+//     case "PageDown":
+//       if (previousCell.rowIndex + visibleRowCount < totalRows) {
+//         currentApi?.paginationGoToNextPage();
+
+//         setTimeout(() => {
+//           const newFocusedIndex =
+//             relativeRowIndexRef.current +
+//             previousCell.rowIndex -
+//             (previousCell.rowIndex % visibleRowCount);
+//           setFocusedRowIndex(newFocusedIndex);
+//           currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
+//           currentApi?.ensureIndexVisible(newFocusedIndex);
+//         }, 100);
+
+//         return {
+//           rowIndex: nextRowIndex,
+//           column: previousCell.column,
+//           rowPinned: null,
+//         };
+//       }
+//       break;
+
+//     case "PageUp":
+//       if (previousCell.rowIndex - visibleRowCount >= 0) {
+//         currentApi?.paginationGoToPreviousPage();
+
+//         setTimeout(() => {
+//           const newFocusedIndex =
+//             relativeRowIndexRef.current +
+//             previousCell.rowIndex -
+//             (previousCell.rowIndex % visibleRowCount);
+//           setFocusedRowIndex(newFocusedIndex);
+//           currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
+//           currentApi?.ensureIndexVisible(newFocusedIndex);
+//         }, 100);
+
+//         return {
+//           rowIndex: nextRowIndex,
+//           column: previousCell.column,
+//           rowPinned: null,
+//         };
+//       }
+//       break;
+//   }
+
+//   return null;
+// };

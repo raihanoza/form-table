@@ -1,20 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AgGridReact } from "ag-grid-react";
+import { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import {
   ColDef,
   IGetRowsParams,
   GridReadyEvent,
   GridOptions,
   ValueGetterParams,
-  NavigateToNextCellParams,
-  CellPosition,
   RowClickedEvent,
   RowClassParams,
   GridApi,
   CellFocusedEvent,
+  ICellRendererParams,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
+import { Button } from "./ui/button";
+import { useMutation, useQueryClient } from "react-query";
+import { useRouter } from "next/navigation";
 
 interface Barang {
   id: string;
@@ -45,10 +47,14 @@ interface FetchResponse {
 
 const PengirimanTable: React.FC = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+
   const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
   const relativeRowIndexRef = useRef<number>(0); // Ref untuk simpan relativeRowIndex
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const limit = 500;
 
@@ -88,7 +94,7 @@ const PengirimanTable: React.FC = () => {
 
           const result: FetchResponse = await response.json();
           setData(result);
-
+          setIsLoading(false);
           const lastRow = result.totalData;
           if (result.data.length) {
             params.successCallback(result.data, lastRow);
@@ -98,6 +104,7 @@ const PengirimanTable: React.FC = () => {
         } catch (error) {
           console.error("Failed to fetch data", error);
           params.failCallback();
+          setIsLoading(false);
         }
       },
     };
@@ -105,22 +112,101 @@ const PengirimanTable: React.FC = () => {
     setTimeout(() => {
       api.setFocusedCell(0, "namaPengirim");
       api.getRowNode("0")?.setSelected(true); // Pilih baris pertama
-      api.ensureIndexVisible(0, "middle"); // Pastikan baris pertama terlihat
+      api.ensureIndexVisible(0); // Pastikan baris pertama terlihat
     }, 0); // Timeout untuk memastikan grid sudah dirender
     params.api.setGridOption("datasource", dataSource);
   }, []);
+  const handleUpdate = (id: number) => {
+    router.push(`/pengiriman/${id}`);
+  };
+
+  const mutation = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/pengiriman/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["pengiriman"]);
+
+      // Refresh the grid after the delete is successful
+      if (gridApiRef.current) {
+        gridApiRef.current.refreshInfiniteCache(); // This will refresh the infinite scroll data
+      }
+    },
+    onError: (error) => {
+      console.error("Error deleting pengiriman", error);
+    },
+  });
+
+  const handleDelete = (id: number) => {
+    if (window.confirm("Are you sure you want to delete this item?")) {
+      mutation.mutate(id);
+    }
+  };
+
+  const highlightText = (text: string | undefined, filterText: string) => {
+    if (!text) return ""; // Handle undefined or null text
+
+    if (!filterText) return text; // Return original text if there's no filter text
+
+    const regex = new RegExp(`(${filterText})`, "gi");
+    const parts = text.split(regex);
+
+    return parts.map((part, index) => (
+      <span
+        key={index}
+        style={
+          part.toLowerCase() === filterText.toLowerCase()
+            ? { backgroundColor: "#aaa" }
+            : {}
+        }
+      >
+        {part}
+      </span>
+    ));
+  };
 
   const columns: ColDef<Pengiriman>[] = [
+    {
+      headerName: "No.",
+      maxWidth: 80,
+      valueGetter: "node.id",
+      cellRenderer: (props: CustomCellRendererProps) => {
+        if (props.value !== undefined) {
+          return props.node.rowIndex !== null ? props.node.rowIndex + 1 : 0;
+        } else {
+          return (
+            <img src="https://www.ag-grid.com/example-assets/loading.gif" />
+          );
+        }
+      },
+      sortable: false,
+      cellClass: "text-center",
+      suppressHeaderMenuButton: true,
+    },
     {
       headerName: "Nama Pengirim",
       field: "namaPengirim",
       filter: "agTextColumnFilter",
+      cellRenderer: (params: ICellRendererParams) => {
+        const filterModel = params.api.getFilterModel();
+        const filterText = filterModel.namaPengirim
+          ? filterModel.namaPengirim.filter
+          : "";
+        return <div>{highlightText(params.value, filterText)}</div>;
+      },
       floatingFilter: true,
     },
     {
       headerName: "Nama Penerima",
       field: "namaPenerima",
       filter: "agTextColumnFilter",
+      cellRenderer: (params: ICellRendererParams) => {
+        const filterModel = params.api.getFilterModel();
+        const filterText = filterModel.namaPenerima
+          ? filterModel.namaPenerima.filter
+          : "";
+        return <div>{highlightText(params.value, filterText)}</div>;
+      },
       floatingFilter: true,
     },
     {
@@ -139,106 +225,22 @@ const PengirimanTable: React.FC = () => {
         return date.toLocaleDateString("id-ID");
       },
     },
+    {
+      headerName: "Actions",
+      cellRenderer: (params: ICellRendererParams) => (
+        <div className="flex space-x-2">
+          <Button onClick={() => handleUpdate(params.data.id)}>Update</Button>
+          <Button
+            onClick={() => handleDelete(params.data.id)}
+            variant="destructive"
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+      cellClass: "text-center",
+    },
   ];
-
-  const navigateToNextCell = (
-    params: NavigateToNextCellParams
-  ): CellPosition | null => {
-    const previousCell = params.previousCellPosition;
-    const currentApi = gridApiRef.current;
-
-    const totalRows = data?.totalData || 0;
-    const visibleRowCount = currentApi?.getDisplayedRowCount() || 10;
-
-    let nextRowIndex = previousCell.rowIndex;
-    relativeRowIndexRef.current = previousCell.rowIndex % visibleRowCount;
-
-    switch (params.key) {
-      case "ArrowDown":
-        nextRowIndex = previousCell.rowIndex + 1;
-
-        // Pastikan tidak melewati batas jumlah total row
-        if (nextRowIndex < totalRows) {
-          setFocusedRowIndex(nextRowIndex);
-
-          // Fokus baris berikutnya dan pastikan terlihat di tengah layar
-          currentApi?.ensureIndexVisible(nextRowIndex, "middle");
-          currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
-
-          return {
-            rowIndex: nextRowIndex,
-            column: previousCell.column,
-            rowPinned: null,
-          };
-        }
-        break;
-
-      case "ArrowUp":
-        nextRowIndex = previousCell.rowIndex - 1;
-
-        // Pastikan tidak melewati baris paling atas
-        if (nextRowIndex >= 0) {
-          setFocusedRowIndex(nextRowIndex);
-
-          // Fokus baris sebelumnya dan pastikan terlihat di tengah layar
-          currentApi?.ensureIndexVisible(nextRowIndex, "middle");
-          currentApi?.setFocusedCell(nextRowIndex, previousCell.column);
-
-          return {
-            rowIndex: nextRowIndex,
-            column: previousCell.column,
-            rowPinned: null,
-          };
-        }
-        break;
-
-      case "PageDown":
-        if (previousCell.rowIndex + visibleRowCount < totalRows) {
-          currentApi?.paginationGoToNextPage();
-
-          setTimeout(() => {
-            const newFocusedIndex =
-              relativeRowIndexRef.current +
-              previousCell.rowIndex -
-              (previousCell.rowIndex % visibleRowCount);
-            setFocusedRowIndex(newFocusedIndex);
-            currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
-            currentApi?.ensureIndexVisible(newFocusedIndex, "middle");
-          }, 100);
-
-          return {
-            rowIndex: nextRowIndex,
-            column: previousCell.column,
-            rowPinned: null,
-          };
-        }
-        break;
-
-      case "PageUp":
-        if (previousCell.rowIndex - visibleRowCount >= 0) {
-          currentApi?.paginationGoToPreviousPage();
-
-          setTimeout(() => {
-            const newFocusedIndex =
-              relativeRowIndexRef.current +
-              previousCell.rowIndex -
-              (previousCell.rowIndex % visibleRowCount);
-            setFocusedRowIndex(newFocusedIndex);
-            currentApi?.setFocusedCell(newFocusedIndex, previousCell.column);
-            currentApi?.ensureIndexVisible(newFocusedIndex, "middle");
-          }, 100);
-
-          return {
-            rowIndex: nextRowIndex,
-            column: previousCell.column,
-            rowPinned: null,
-          };
-        }
-        break;
-    }
-
-    return null;
-  };
 
   const getRowClass = (params: RowClassParams) => {
     return params.node.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
@@ -253,12 +255,12 @@ const PengirimanTable: React.FC = () => {
   const gridOptions: GridOptions<Pengiriman> = {
     defaultColDef: {
       editable: true,
+      sortable: true,
       flex: 1,
       minWidth: 100,
       filter: true,
     },
     getRowClass,
-    navigateToNextCell, // Make sure this is included
     columnDefs: columns,
     onGridReady: (params) => {
       gridApiRef.current = params.api;
@@ -287,27 +289,36 @@ const PengirimanTable: React.FC = () => {
   }, []);
   const onCellFocused = (event: CellFocusedEvent) => {
     setFocusedRowIndex(event.rowIndex ?? 0);
+    event.rowIndex ? "custom-row-focus" : "";
   };
-  if (data === undefined) {
+  if (isLoading) {
     return <div>Loading...</div>;
   }
   return (
-    <div className="ag-theme-alpine" style={{ height: 519, width: "100%" }}>
-      <AgGridReact
-        ref={gridRef}
-        columnDefs={columns}
-        rowModelType="infinite"
-        cacheBlockSize={limit}
-        onCellFocused={onCellFocused}
-        maxBlocksInCache={10}
-        getRowClass={getRowClass}
-        onRowClicked={onRowClicked}
-        animateRows={true}
-        navigateToNextCell={navigateToNextCell}
-        onGridReady={onGridReady}
-        suppressCellFocus={false} // Make sure cell focus is enabled
-        gridOptions={gridOptions} // Pass the entire gridOptions correctly
-      />
+    <div className="w-full flex items-center justify-center">
+      <div className="w-5/6 h-full p-10 bg-white shadow-md rounded-lg">
+        <div className="ag-theme-alpine w-full" style={{ height: "600px" }}>
+          {isLoading ? ( // Show loading spinner while fetching data
+            <div>Loading...</div>
+          ) : (
+            <AgGridReact
+              ref={gridRef}
+              columnDefs={columns}
+              rowModelType="infinite"
+              cacheBlockSize={500}
+              onCellFocused={onCellFocused}
+              maxBlocksInCache={500}
+              getRowClass={getRowClass}
+              onRowClicked={onRowClicked}
+              animateRows={true}
+              // navigateToNextCell={navigateToNextCell}
+              onGridReady={onGridReady}
+              suppressCellFocus={false} // Make sure cell focus is enabled
+              gridOptions={gridOptions} // Pass the entire gridOptions correctly
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

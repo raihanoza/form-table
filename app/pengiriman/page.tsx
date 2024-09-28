@@ -87,10 +87,11 @@ export default function PengirimanForm() {
   }, [barang]);
 
   const mutation = useMutation(submitPengiriman, {
-    onSuccess: () => {
-      alert("Pengiriman berhasil disimpan!");
+    onSuccess: (data) => {
+      alert(data.message);
       reset();
-      router.push("/");
+      router.push("/infinite-scroll");
+      localStorage.setItem("newPengirimanId", data.data.pengirimanId);
     },
     onError: () => {
       alert("Error dalam menyimpan data.");
@@ -106,7 +107,7 @@ export default function PengirimanForm() {
       <h1 className="text-2xl font-bold mb-6 text-center">Form Pengiriman</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
+          <div>
             <label className="block mb-1">Nama Pengirim</label>
             <input
               {...register("namaPengirim", { required: true })}
@@ -161,7 +162,10 @@ export default function PengirimanForm() {
         <div>
           <h2 className="text-xl font-bold mb-4">Barang</h2>
           {fields.map((item: Barang, index: number) => (
-            <div key={item.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div
+              key={item.id}
+              className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
+            >
               <div>
                 <label className="block mb-1">Nama Barang</label>
                 <select
@@ -172,11 +176,13 @@ export default function PengirimanForm() {
                   {isLoading ? (
                     <option value="">Loading...</option>
                   ) : (
-                    detailBarangOptions.map((barang: { id: string; nama: string }) => (
-                      <option key={barang.id} value={barang.id}>
-                        {barang.nama}
-                      </option>
-                    ))
+                    detailBarangOptions.map(
+                      (barang: { id: string; nama: string }) => (
+                        <option key={barang.id} value={barang.id}>
+                          {barang.nama}
+                        </option>
+                      )
+                    )
                   )}
                 </select>
               </div>

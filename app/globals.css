@@ -133,3 +133,6 @@ body {
   justify-content: center;
   align-items: center;
 }
+.ag-cell {
+  border-right: 1px solid #aaa !important;
+}
