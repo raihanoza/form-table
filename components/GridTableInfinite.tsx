@@ -7,10 +7,10 @@ import {
   GridOptions,
   ValueGetterParams,
   RowClickedEvent,
-  RowClassParams,
   GridApi,
   CellFocusedEvent,
   ICellRendererParams,
+  RowClassParams,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -46,8 +46,6 @@ interface FetchResponse {
 }
 
 const PengirimanTable: React.FC = () => {
-  const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
-
   const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
   const relativeRowIndexRef = useRef<number>(0); // Ref untuk simpan relativeRowIndex
   const [data, setData] = useState<FetchResponse | null>(null);
@@ -55,13 +53,12 @@ const PengirimanTable: React.FC = () => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  const limit = 500;
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null); // State to keep track of the focused row index
+  const limit = 25;
 
   const onGridReady = useCallback((params: GridReadyEvent) => {
     const api = params.api; // Ambil api dari event onGridReady
     gridApiRef.current = params.api; // Simpan api grid
-
     const dataSource = {
       getRows: async (params: IGetRowsParams) => {
         const currentPageNumber = Math.floor(params.startRow / limit) + 1;
@@ -108,12 +105,13 @@ const PengirimanTable: React.FC = () => {
         }
       },
     };
+    api.setFocusedCell(0, "namaPengirim");
     params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
     setTimeout(() => {
       api.setFocusedCell(0, "namaPengirim");
-      api.getRowNode("0")?.setSelected(true); // Pilih baris pertama
-      api.ensureIndexVisible(0); // Pastikan baris pertama terlihat
-    }, 0); // Timeout untuk memastikan grid sudah dirender
+      api.getRowNode("0")?.setSelected(true); // Select first row
+      api.ensureIndexVisible(0); // Ensure the first row is visible
+    }, 0); // Timeout to ensure grid has rendered
     params.api.setGridOption("datasource", dataSource);
   }, []);
   const handleUpdate = (id: number) => {
@@ -241,16 +239,22 @@ const PengirimanTable: React.FC = () => {
       cellClass: "text-center",
     },
   ];
-
   const getRowClass = (params: RowClassParams) => {
-    return params.node.rowIndex === focusedRowIndex ? "custom-row-focus" : "";
+    // Add the 'ag-row-focus' class if the row is currently focused
+    return params.node.rowIndex === focusedRowIndex ? "ag-row-focus" : "";
   };
-
   const onRowClicked = (event: RowClickedEvent) => {
     if (event.rowIndex !== null) {
-      setFocusedRowIndex(event.rowIndex);
+      setFocusedRowIndex(event.rowIndex); // Update the focused row index
+      gridApiRef.current?.setFocusedCell(event.rowIndex, "namaPengirim");
     }
   };
+  const onCellFocused = useCallback((event: CellFocusedEvent) => {
+    if (event.rowIndex !== null && event.column) {
+      // AG Grid automatically adds the `ag-cell-focus` class to the focused cell,
+      // so you don't need to manually manipulate class names.
+    }
+  }, []);
 
   const gridOptions: GridOptions<Pengiriman> = {
     defaultColDef: {
@@ -265,6 +269,7 @@ const PengirimanTable: React.FC = () => {
     onGridReady: (params) => {
       gridApiRef.current = params.api;
     },
+    suppressHeaderFocus: true, // Prevent header focus
   };
 
   useEffect(() => {
@@ -278,7 +283,6 @@ const PengirimanTable: React.FC = () => {
       gridApiRef.current.addEventListener("paginationChanged", () => {
         const currentApi = gridApiRef.current;
         if (currentApi) {
-          setFocusedRowIndex(relativeRowIndexRef.current);
           currentApi.setFocusedCell(
             relativeRowIndexRef.current,
             "namaPengirim"
@@ -287,16 +291,13 @@ const PengirimanTable: React.FC = () => {
       });
     }
   }, []);
-  const onCellFocused = (event: CellFocusedEvent) => {
-    setFocusedRowIndex(event.rowIndex ?? 0);
-    event.rowIndex ? "custom-row-focus" : "";
-  };
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
   return (
     <div className="w-full flex items-center justify-center">
-      <div className="w-5/6 h-full p-10 bg-white shadow-md rounded-lg">
+      <div className="w-5/6 h-full p-25 bg-white shadow-md rounded-lg">
         <div className="ag-theme-alpine w-full" style={{ height: "600px" }}>
           {isLoading ? ( // Show loading spinner while fetching data
             <div>Loading...</div>
@@ -305,16 +306,15 @@ const PengirimanTable: React.FC = () => {
               ref={gridRef}
               columnDefs={columns}
               rowModelType="infinite"
-              cacheBlockSize={500}
+              cacheBlockSize={25}
               onCellFocused={onCellFocused}
-              maxBlocksInCache={500}
+              maxBlocksInCache={25}
               getRowClass={getRowClass}
               onRowClicked={onRowClicked}
               animateRows={true}
-              // navigateToNextCell={navigateToNextCell}
               onGridReady={onGridReady}
-              suppressCellFocus={false} // Make sure cell focus is enabled
-              gridOptions={gridOptions} // Pass the entire gridOptions correctly
+              suppressCellFocus={false}
+              gridOptions={gridOptions}
             />
           )}
         </div>

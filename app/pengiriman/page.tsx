@@ -90,8 +90,8 @@ export default function PengirimanForm() {
     onSuccess: (data) => {
       alert(data.message);
       reset();
-      router.push("/infinite-scroll");
-      localStorage.setItem("newPengirimanId", data.data.pengirimanId);
+      localStorage.setItem("newPengirimanId", data.data.pengirimanId); // Store new pengirimanId
+      router.push("/infinite-scroll"); // Redirect to the infinite scroll page
     },
     onError: () => {
       alert("Error dalam menyimpan data.");

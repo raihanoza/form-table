@@ -83,8 +83,11 @@ body {
     @apply bg-background text-foreground;
   }
 }
-.custom-row-focus {
+.ag-row-focus {
   background-color: rgb(244, 244, 47) !important; /* Warna latar belakang fokus */
+}
+.ag-cell-focus {
+  background-color: #d3d3d3 !important; /* Customize the focus background color */
 }
 
 .pagination-container {
