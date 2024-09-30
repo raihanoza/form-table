@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import React from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
-import { useMutation, useQuery } from "react-query";
-
+import { useMutation, useQuery, useQueryClient } from "react-query";
 // Interface data form
 interface Barang {
   id?: string;
@@ -50,6 +49,7 @@ const fetchDetailBarang = async () => {
 };
 
 export default function PengirimanForm() {
+  const queryClient = useQueryClient();
   const { register, control, handleSubmit, reset, setValue } =
     useForm<IPengirimanForm>({
       defaultValues: {
@@ -88,10 +88,12 @@ export default function PengirimanForm() {
 
   const mutation = useMutation(submitPengiriman, {
     onSuccess: (data) => {
+      // console.log(data.data.pe);
+      localStorage.setItem("newPengirimanId", String(data.data.pengirimanId));
       alert(data.message);
       reset();
-      localStorage.setItem("newPengirimanId", data.data.pengirimanId); // Store new pengirimanId
-      router.push("/infinite-scroll"); // Redirect to the infinite scroll page
+      router.push("/infinite-scroll");
+      queryClient.invalidateQueries("pengiriman");
     },
     onError: () => {
       alert("Error dalam menyimpan data.");

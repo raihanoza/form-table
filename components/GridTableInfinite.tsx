@@ -7,16 +7,17 @@ import {
   GridOptions,
   ValueGetterParams,
   RowClickedEvent,
-  GridApi,
-  CellFocusedEvent,
-  ICellRendererParams,
   RowClassParams,
+  GridApi,
+  ICellRendererParams,
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { Button } from "./ui/button";
-import { useMutation, useQueryClient } from "react-query";
-import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "react-query";
+import { useParams, useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { SubmitHandler, useFieldArray, useForm } from "react-hook-form";
 
 interface Barang {
   id: string;
@@ -45,79 +46,224 @@ interface FetchResponse {
   data: Pengiriman[];
 }
 
+type FormValues = {
+  id: string;
+  namaPengirim: string;
+  alamatPengirim: string;
+  nohpPengirim: string;
+  namaPenerima: string;
+  alamatPenerima: string;
+  nohpPenerima: string;
+  barang: { barangId: string; jumlahBarang: number; harga: number }[];
+  totalHarga: number;
+};
+
+// Define a function to submit the data to the server
+const submitPengiriman = async (data: FormValues) => {
+  const response = await fetch(`/api/pengiriman/${data.id}`, {
+    method: "PUT", // or "PATCH" if your API uses PATCH for updates
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error("Gagal memperbarui pengiriman");
+  }
+
+  return response.json();
+};
 const PengirimanTable: React.FC = () => {
+  const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+  const [newPengirimanId, setNewPengirimanId] = useState<number | null>(null);
   const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
   const relativeRowIndexRef = useRef<number>(0); // Ref untuk simpan relativeRowIndex
+  const [selectedRowData, setSelectedRowData] = useState<FormValues | null>(
+    null
+  );
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
   const queryClient = useQueryClient();
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null); // State to keep track of the focused row index
-  const limit = 25;
-
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    const api = params.api; // Ambil api dari event onGridReady
-    gridApiRef.current = params.api; // Simpan api grid
-    const dataSource = {
-      getRows: async (params: IGetRowsParams) => {
-        const currentPageNumber = Math.floor(params.startRow / limit) + 1;
-
-        const filterModel = params.filterModel;
-        const selectedDate = filterModel?.tanggalKeberangkatan?.dateFrom;
-        const formattedTanggal = selectedDate
-          ? new Date(selectedDate).toLocaleDateString("en-CA")
-          : "";
-
-        const filters = {
-          namaPengirim: filterModel?.namaPengirim?.filter || "",
-          namaPenerima: filterModel?.namaPenerima?.filter || "",
-          tanggalKeberangkatan: formattedTanggal,
-          totalHarga: "",
-          barangFilter: filterModel?.barang?.filter || "",
-        };
-
-        try {
-          const response = await fetch(`/api/infinite-scroll`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              pagination: { page: currentPageNumber, limit },
-              filters,
-            }),
-          });
-
-          const result: FetchResponse = await response.json();
-          setData(result);
-          setIsLoading(false);
-          const lastRow = result.totalData;
-          if (result.data.length) {
-            params.successCallback(result.data, lastRow);
-          } else {
-            params.failCallback();
-          }
-        } catch (error) {
-          console.error("Failed to fetch data", error);
-          params.failCallback();
-          setIsLoading(false);
-        }
+  const limit = 500;
+  const { register, handleSubmit, control, setValue, watch, reset } =
+    useForm<FormValues>({
+      defaultValues: {
+        id: "",
+        namaPengirim: "",
+        alamatPengirim: "",
+        nohpPengirim: "",
+        namaPenerima: "",
+        alamatPenerima: "",
+        nohpPenerima: "",
+        barang: [{ barangId: "", jumlahBarang: 1, harga: 0 }],
+        totalHarga: 0,
       },
-    };
-    api.setFocusedCell(0, "namaPengirim");
-    params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
-    setTimeout(() => {
-      api.setFocusedCell(0, "namaPengirim");
-      api.getRowNode("0")?.setSelected(true); // Select first row
-      api.ensureIndexVisible(0); // Ensure the first row is visible
-    }, 0); // Timeout to ensure grid has rendered
-    params.api.setGridOption("datasource", dataSource);
-  }, []);
-  const handleUpdate = (id: number) => {
-    router.push(`/pengiriman/${id}`);
+    });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "barang",
+  });
+  const fetchDetailBarang = async () => {
+    const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
+    if (!res.ok) throw new Error("Failed to fetch detail barang");
+    return res.json();
   };
 
+  const { data: detailBarangOptions = [], isLoading: isLoadingFetch } =
+    useQuery("detailBarang", fetchDetailBarang);
+  const { id } = useParams(); // Use useParams to get URL parameters
+  const pengirimanId = id as string;
+
+  const router = useRouter(); // Use useRouter for programmatic navigation
+
+  const mutationUpdate = useMutation(submitPengiriman, {
+    onSuccess: () => {
+      alert("Pengiriman berhasil disimpan!");
+      reset();
+      router.push("/"); // Redirect to homepage after successful submission
+    },
+    onError: () => {
+      alert("Error dalam menyimpan data.");
+    },
+  });
+
+  const onSubmit: SubmitHandler<FormValues> = (data) => {
+    mutationUpdate.mutate({ ...data, id: pengirimanId }); // Pass the ID with the data
+  };
+
+  // Watch the barang field array for changes
+  const barang = watch("barang");
+
+  useEffect(() => {
+    const fetchPengiriman = async () => {
+      try {
+        const response = await fetch(`/api/pengiriman/${pengirimanId}`);
+
+        if (!response.ok) {
+          throw new Error("Data tidak ditemukan");
+        }
+
+        // Cek jika respons kosong
+        if (response.headers.get("Content-Length") === "0") {
+          throw new Error("Respons kosong");
+        }
+
+        const data = await response.json();
+
+        // Pastikan data yang diterima sesuai dengan FormValues
+        const normalizedData: FormValues = {
+          id: data.id || "",
+          namaPengirim: data.namaPengirim || "",
+          alamatPengirim: data.alamatPengirim || "",
+          nohpPengirim: data.nohpPengirim || "",
+          namaPenerima: data.namaPenerima || "",
+          alamatPenerima: data.alamatPenerima || "",
+          nohpPenerima: data.nohpPenerima || "",
+          barang: data.barang || [{ barangId: "", jumlahBarang: 1, harga: 0 }],
+          totalHarga: data.totalHarga || 0,
+        };
+
+        reset(normalizedData);
+      } catch (error) {
+        console.error("Error fetching pengiriman data:", error);
+      }
+    };
+
+    if (pengirimanId) {
+      fetchPengiriman();
+    }
+  }, [pengirimanId, reset]);
+
+  useEffect(() => {
+    // Calculate totalHarga whenever any item in the barang array changes
+    const calculateTotalHarga = () => {
+      const total = barang.reduce(
+        (sum, item) => sum + (item.jumlahBarang || 0) * (item.harga || 0),
+        0
+      );
+      setValue("totalHarga", total, { shouldValidate: true }); // Update the totalHarga in form
+    };
+
+    calculateTotalHarga();
+  }, [barang, setValue]);
+  const onGridReady = useCallback(
+    (params: GridReadyEvent) => {
+      const api = params.api; // Ambil api dari event onGridReady
+      gridApiRef.current = params.api; // Simpan api grid
+
+      const dataSource = {
+        getRows: async (params: IGetRowsParams) => {
+          const currentPageNumber = Math.floor(params.startRow / limit) + 1;
+
+          const filterModel = params.filterModel;
+          const selectedDate = filterModel?.tanggalKeberangkatan?.dateFrom;
+          const formattedTanggal = selectedDate
+            ? new Date(selectedDate).toLocaleDateString("en-CA")
+            : "";
+
+          const filters = {
+            namaPengirim: filterModel?.namaPengirim?.filter || "",
+            namaPenerima: filterModel?.namaPenerima?.filter || "",
+            tanggalKeberangkatan: formattedTanggal,
+            totalHarga: "",
+            barangFilter: filterModel?.barang?.filter || "",
+          };
+
+          try {
+            const response = await fetch(`/api/infinite-scroll`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                pagination: { page: currentPageNumber, limit },
+                filters,
+              }),
+            });
+
+            const result: FetchResponse = await response.json();
+            setData(result);
+            setIsLoading(false);
+            const lastRow = result.totalData;
+            if (result.data.length) {
+              params.successCallback(result.data, lastRow);
+              if (newPengirimanId && gridApiRef.current) {
+                const rowIndex = result?.data.findIndex(
+                  (pengiriman) => pengiriman.id === newPengirimanId
+                );
+                if (rowIndex !== -1) {
+                  setTimeout(() => {
+                    gridApiRef.current?.ensureIndexVisible(rowIndex);
+                    gridApiRef.current?.setFocusedCell(
+                      rowIndex,
+                      "namaPengirim"
+                    );
+                  }, 0);
+                }
+              }
+            } else {
+              params.failCallback();
+            }
+          } catch (error) {
+            console.error("Failed to fetch data", error);
+            params.failCallback();
+            setIsLoading(false);
+          }
+        },
+      };
+      // params.api.setFocusedCell(0, "namaPengirim"); // Focus the first row
+      setTimeout(() => {
+        api.setFocusedCell(0, "namaPengirim");
+        api.getRowNode("0")?.setSelected(true); // Pilih baris pertama
+        api.ensureIndexVisible(0); // Pastikan baris pertama terlihat
+      }, 0); // Timeout untuk memastikan grid sudah dirender
+      params.api.setGridOption("datasource", dataSource);
+    },
+    [newPengirimanId]
+  );
   const mutation = useMutation({
     mutationFn: async (id: number) => {
       await fetch(`/api/pengiriman/${id}`, { method: "DELETE" });
@@ -168,6 +314,7 @@ const PengirimanTable: React.FC = () => {
       headerName: "No.",
       maxWidth: 80,
       valueGetter: "node.id",
+      suppressNavigable: true,
       cellRenderer: (props: CustomCellRendererProps) => {
         if (props.value !== undefined) {
           return props.node.rowIndex !== null ? props.node.rowIndex + 1 : 0;
@@ -179,7 +326,6 @@ const PengirimanTable: React.FC = () => {
       },
       sortable: false,
       cellClass: "text-center",
-      suppressHeaderMenuButton: true,
     },
     {
       headerName: "Nama Pengirim",
@@ -225,9 +371,154 @@ const PengirimanTable: React.FC = () => {
     },
     {
       headerName: "Actions",
+      suppressNavigable: true,
       cellRenderer: (params: ICellRendererParams) => (
         <div className="flex space-x-2">
-          <Button onClick={() => handleUpdate(params.data.id)}>Update</Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>Update</Button>
+            </DialogTrigger>
+            <DialogContent className="min-w-full h-lvh bg-white">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-1">Nama Pengirim</label>
+                    <input
+                      {...register("namaPengirim", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1">Alamat Pengirim</label>
+                    <input
+                      {...register("alamatPengirim", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1">No HP Pengirim</label>
+                    <input
+                      {...register("nohpPengirim", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1">Nama Penerima</label>
+                    <input
+                      {...register("namaPenerima", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1">Alamat Penerima</label>
+                    <input
+                      {...register("alamatPenerima", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1">No HP Penerima</label>
+                    <input
+                      {...register("nohpPenerima", { required: true })}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-bold mb-4">Barang</h2>
+                  {fields.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
+                    >
+                      <div>
+                        <label className="block mb-1">Nama Barang</label>
+                        <select
+                          {...register(`barang.${index}.barangId`, {
+                            required: true,
+                          })}
+                          className="w-full border border-gray-300 p-2"
+                        >
+                          <option value="">Pilih Barang</option>
+                          {isLoadingFetch ? (
+                            <option value="">Loading...</option>
+                          ) : (
+                            detailBarangOptions.map(
+                              (barang: { id: string; nama: string }) => (
+                                <option key={barang.id} value={barang.id}>
+                                  {barang.nama}
+                                </option>
+                              )
+                            )
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1">Jumlah Barang</label>
+                        <input
+                          type="number"
+                          {...register(`barang.${index}.jumlahBarang`, {
+                            required: true,
+                            valueAsNumber: true,
+                          })}
+                          className="w-full border border-gray-300 p-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1">Harga Barang</label>
+                        <input
+                          type="number"
+                          {...register(`barang.${index}.harga`, {
+                            required: true,
+                            valueAsNumber: true,
+                          })}
+                          className="w-full border border-gray-300 p-2"
+                        />
+                      </div>
+                      <div className="col-span-full">
+                        <button
+                          type="button"
+                          className="text-red-500"
+                          onClick={() => remove(index)}
+                        >
+                          Hapus Barang
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      append({ barangId: "", jumlahBarang: 1, harga: 0 })
+                    }
+                    className="text-blue-500"
+                  >
+                    Tambah Barang
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block mb-1">Total Harga</label>
+                  <input
+                    type="number"
+                    readOnly
+                    {...register("totalHarga")}
+                    className="w-full border border-gray-300 p-2"
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+                  >
+                    Simpan Pengiriman
+                  </button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
           <Button
             onClick={() => handleDelete(params.data.id)}
             variant="destructive"
@@ -239,22 +530,22 @@ const PengirimanTable: React.FC = () => {
       cellClass: "text-center",
     },
   ];
+
   const getRowClass = (params: RowClassParams) => {
-    // Add the 'ag-row-focus' class if the row is currently focused
-    return params.node.rowIndex === focusedRowIndex ? "ag-row-focus" : "";
+    if (params.node.rowIndex === focusedRowIndex) {
+      return "ag-row-focus"; // Menambahkan kelas fokus untuk baris
+    }
+    if (newPengirimanId && params.data.id === newPengirimanId) {
+      return "ag-row-focus"; // Gaya fokus untuk baris yang memiliki ID baru
+    }
+    return "";
   };
   const onRowClicked = (event: RowClickedEvent) => {
     if (event.rowIndex !== null) {
-      setFocusedRowIndex(event.rowIndex); // Update the focused row index
-      gridApiRef.current?.setFocusedCell(event.rowIndex, "namaPengirim");
+      setFocusedRowIndex(event.rowIndex);
+      setSelectedRowData(event.data as FormValues); // Store selected row data
     }
   };
-  const onCellFocused = useCallback((event: CellFocusedEvent) => {
-    if (event.rowIndex !== null && event.column) {
-      // AG Grid automatically adds the `ag-cell-focus` class to the focused cell,
-      // so you don't need to manually manipulate class names.
-    }
-  }, []);
 
   const gridOptions: GridOptions<Pengiriman> = {
     defaultColDef: {
@@ -269,7 +560,6 @@ const PengirimanTable: React.FC = () => {
     onGridReady: (params) => {
       gridApiRef.current = params.api;
     },
-    suppressHeaderFocus: true, // Prevent header focus
   };
 
   useEffect(() => {
@@ -283,6 +573,7 @@ const PengirimanTable: React.FC = () => {
       gridApiRef.current.addEventListener("paginationChanged", () => {
         const currentApi = gridApiRef.current;
         if (currentApi) {
+          setFocusedRowIndex(relativeRowIndexRef.current);
           currentApi.setFocusedCell(
             relativeRowIndexRef.current,
             "namaPengirim"
@@ -292,12 +583,25 @@ const PengirimanTable: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const savedPengirimanId = localStorage.getItem("newPengirimanId");
+    if (savedPengirimanId) {
+      setNewPengirimanId(parseInt(savedPengirimanId));
+      localStorage.removeItem("newPengirimanId"); // Hapus data setelah digunakan
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedRowData) {
+      reset(selectedRowData); // Update form values with selected row data
+    }
+  }, [selectedRowData, reset]);
   if (isLoading) {
     return <div>Loading...</div>;
   }
   return (
     <div className="w-full flex items-center justify-center">
-      <div className="w-5/6 h-full p-25 bg-white shadow-md rounded-lg">
+      <div className="w-5/6 h-full p-10 bg-white shadow-md rounded-lg">
         <div className="ag-theme-alpine w-full" style={{ height: "600px" }}>
           {isLoading ? ( // Show loading spinner while fetching data
             <div>Loading...</div>
@@ -306,15 +610,15 @@ const PengirimanTable: React.FC = () => {
               ref={gridRef}
               columnDefs={columns}
               rowModelType="infinite"
-              cacheBlockSize={25}
-              onCellFocused={onCellFocused}
-              maxBlocksInCache={25}
+              cacheBlockSize={500}
+              suppressHeaderFocus={true}
+              maxBlocksInCache={500}
               getRowClass={getRowClass}
               onRowClicked={onRowClicked}
               animateRows={true}
               onGridReady={onGridReady}
-              suppressCellFocus={false}
-              gridOptions={gridOptions}
+              suppressCellFocus={false} // Make sure cell focus is enabled
+              gridOptions={gridOptions} // Pass the entire gridOptions correctly
             />
           )}
         </div>
