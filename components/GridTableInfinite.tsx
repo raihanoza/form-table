@@ -14,17 +14,11 @@ import {
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { Button } from "./ui/button";
-import { useMutation, useQuery, useQueryClient } from "react-query";
-import { useParams, useRouter } from "next/navigation";
+import { FaPlus } from "react-icons/fa6";
+import { MdDelete, MdEdit } from "react-icons/md";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { SubmitHandler, useFieldArray, useForm } from "react-hook-form";
-
-interface Barang {
-  id: string;
-  namaBarang: string;
-  jumlahBarang: number;
-  harga: number;
-}
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { useMutation, useQuery, useQueryClient } from "react-query";
 
 interface Pengiriman {
   id: number;
@@ -45,60 +39,44 @@ interface FetchResponse {
   currentPage: number;
   data: Pengiriman[];
 }
+interface Barang {
+  id?: string;
+  barangId: string;
+  jumlahBarang: number;
+  harga: number;
+}
 
-type FormValues = {
-  id: string;
+interface IPengirimanForm {
   namaPengirim: string;
   alamatPengirim: string;
   nohpPengirim: string;
   namaPenerima: string;
   alamatPenerima: string;
   nohpPenerima: string;
-  barang: { barangId: string; jumlahBarang: number; harga: number }[];
-  totalHarga: number;
-};
-
-// Define a function to submit the data to the server
-const submitPengiriman = async (data: FormValues) => {
-  const response = await fetch(`/api/pengiriman/${data.id}`, {
-    method: "PUT", // or "PATCH" if your API uses PATCH for updates
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error("Gagal memperbarui pengiriman");
-  }
-
-  return response.json();
-};
+  barang: Barang[];
+  totalHarga: number; // Added totalHarga field
+  tanggalKeberangkatan: string; // Added tanggalKeberangkatan field
+}
 const PengirimanTable: React.FC = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+  const [selectedRow, setSelectedRow] = useState<Pengiriman | null>(null);
   const [newPengirimanId, setNewPengirimanId] = useState<number | null>(null);
   const gridRef = useRef<AgGridReact | null>(null); // Ref for the AgGridReact component
   const relativeRowIndexRef = useRef<number>(0); // Ref untuk simpan relativeRowIndex
-  const [selectedRowData, setSelectedRowData] = useState<FormValues | null>(
-    null
-  );
   const [data, setData] = useState<FetchResponse | null>(null);
   const gridApiRef = useRef<GridApi<Pengiriman> | null>(null);
-  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const limit = 500;
-  const { register, handleSubmit, control, setValue, watch, reset } =
-    useForm<FormValues>({
+  const [popOver, setPopOver] = useState<boolean>(false);
+  const [editMode, setEditMode] = useState<boolean>(false);
+  const limit = 50;
+  const queryClient = useQueryClient();
+  // const router = useRouter();
+  const { register, control, handleSubmit, reset, setValue } =
+    useForm<IPengirimanForm>({
       defaultValues: {
-        id: "",
-        namaPengirim: "",
-        alamatPengirim: "",
-        nohpPengirim: "",
-        namaPenerima: "",
-        alamatPenerima: "",
-        nohpPenerima: "",
         barang: [{ barangId: "", jumlahBarang: 1, harga: 0 }],
         totalHarga: 0,
+        tanggalKeberangkatan: "",
       },
     });
 
@@ -106,89 +84,106 @@ const PengirimanTable: React.FC = () => {
     control,
     name: "barang",
   });
+
+  const barang = useWatch({ control, name: "barang" });
   const fetchDetailBarang = async () => {
     const res = await fetch("/api/detail-barang"); // Ensure the path matches your API route
     if (!res.ok) throw new Error("Failed to fetch detail barang");
     return res.json();
   };
-
-  const { data: detailBarangOptions = [], isLoading: isLoadingFetch } =
+  // Fetch detail barang
+  const { data: detailBarangOptions = [], isLoading: isLoadingBarang } =
     useQuery("detailBarang", fetchDetailBarang);
-  const { id } = useParams(); // Use useParams to get URL parameters
-  const pengirimanId = id as string;
 
-  const router = useRouter(); // Use useRouter for programmatic navigation
+  const calculateTotalHarga = () => {
+    const total = barang.reduce(
+      (sum, item) => sum + item.jumlahBarang * item.harga,
+      0
+    );
+    setValue("totalHarga", total);
+  };
 
-  const mutationUpdate = useMutation(submitPengiriman, {
-    onSuccess: () => {
-      alert("Pengiriman berhasil disimpan!");
+  React.useEffect(() => {
+    calculateTotalHarga();
+  }, [barang]);
+
+  // Fungsi POST untuk mengirim data
+  const submitPengiriman = async (data: IPengirimanForm) => {
+    const res = await fetch("/api/kirim-barang", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to submit");
+    }
+
+    return res.json();
+  };
+  const updatePengiriman = async (id: number, data: IPengirimanForm) => {
+    const res = await fetch(`/api/kirim-barang`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to update data");
+    return res.json();
+  };
+
+  const mutation = useMutation(submitPengiriman, {
+    onSuccess: (data) => {
+      console.log("Data submitted successfully:", data);
+      const newPengirimanId = data.data.pengirimanId; // ID pengiriman baru
+      setNewPengirimanId(newPengirimanId); // Simpan ID pengiriman baru
+      localStorage.setItem("newPengirimanId", String(newPengirimanId)); // Simpan di localStorage
+      alert(data.message);
+
+      setPopOver(false);
       reset();
-      router.push("/"); // Redirect to homepage after successful submission
+
+      // Invalidate the pengiriman query so it refetches
+      queryClient.invalidateQueries("pengiriman");
+
+      // Reload halaman setelah pengiriman sukses
+      window.location.reload();
     },
     onError: () => {
       alert("Error dalam menyimpan data.");
     },
   });
-
-  const onSubmit: SubmitHandler<FormValues> = (data) => {
-    mutationUpdate.mutate({ ...data, id: pengirimanId }); // Pass the ID with the data
+  const mutationUpdate = useMutation(
+    async (updatedData: IPengirimanForm) => {
+      if (selectedRow && selectedRow.id) {
+        return updatePengiriman(selectedRow.id, updatedData);
+      }
+    },
+    {
+      onSuccess: () => {
+        alert("Data berhasil diperbarui.");
+        setPopOver(false);
+        reset();
+        setEditMode(false); // Kembali ke mode tambah setelah update
+        queryClient.invalidateQueries("pengiriman");
+      },
+      onError: () => {
+        alert("Gagal memperbarui data.");
+      },
+    }
+  );
+  const onSubmit = (data: IPengirimanForm) => {
+    if (editMode && selectedRow !== null) {
+      mutationUpdate.mutate(data);
+    } else {
+      mutation.mutate(data);
+    }
   };
 
-  // Watch the barang field array for changes
-  const barang = watch("barang");
-
-  useEffect(() => {
-    const fetchPengiriman = async () => {
-      try {
-        const response = await fetch(`/api/pengiriman/${pengirimanId}`);
-
-        if (!response.ok) {
-          throw new Error("Data tidak ditemukan");
-        }
-
-        // Cek jika respons kosong
-        if (response.headers.get("Content-Length") === "0") {
-          throw new Error("Respons kosong");
-        }
-
-        const data = await response.json();
-
-        // Pastikan data yang diterima sesuai dengan FormValues
-        const normalizedData: FormValues = {
-          id: data.id || "",
-          namaPengirim: data.namaPengirim || "",
-          alamatPengirim: data.alamatPengirim || "",
-          nohpPengirim: data.nohpPengirim || "",
-          namaPenerima: data.namaPenerima || "",
-          alamatPenerima: data.alamatPenerima || "",
-          nohpPenerima: data.nohpPenerima || "",
-          barang: data.barang || [{ barangId: "", jumlahBarang: 1, harga: 0 }],
-          totalHarga: data.totalHarga || 0,
-        };
-
-        reset(normalizedData);
-      } catch (error) {
-        console.error("Error fetching pengiriman data:", error);
-      }
-    };
-
-    if (pengirimanId) {
-      fetchPengiriman();
-    }
-  }, [pengirimanId, reset]);
-
-  useEffect(() => {
-    // Calculate totalHarga whenever any item in the barang array changes
-    const calculateTotalHarga = () => {
-      const total = barang.reduce(
-        (sum, item) => sum + (item.jumlahBarang || 0) * (item.harga || 0),
-        0
-      );
-      setValue("totalHarga", total, { shouldValidate: true }); // Update the totalHarga in form
-    };
-
-    calculateTotalHarga();
-  }, [barang, setValue]);
   const onGridReady = useCallback(
     (params: GridReadyEvent) => {
       const api = params.api; // Ambil api dari event onGridReady
@@ -264,7 +259,7 @@ const PengirimanTable: React.FC = () => {
     },
     [newPengirimanId]
   );
-  const mutation = useMutation({
+  const mutationDelete = useMutation({
     mutationFn: async (id: number) => {
       await fetch(`/api/pengiriman/${id}`, { method: "DELETE" });
     },
@@ -281,9 +276,40 @@ const PengirimanTable: React.FC = () => {
     },
   });
 
-  const handleDelete = (id: number) => {
+  const handleDelete = () => {
+    // Check if focusedRowIndex is valid
+    if (focusedRowIndex === null || focusedRowIndex === undefined) {
+      alert("Please select a row to delete.");
+      return;
+    }
+
+    // Retrieve the row node safely
+    const rowNode = gridApiRef.current?.getRowNode(focusedRowIndex.toString());
+
+    // Log the rowNode for debugging
+    console.log("RowNode: ", rowNode);
+
+    // Check if rowNode is defined
+    if (!rowNode) {
+      alert("Row not found.");
+      return;
+    }
+
+    // Extract the ID from the row node
+    const idToDelete = rowNode.data?.id; // Use optional chaining here
+
+    // Log the ID for debugging
+    console.log("ID to delete: ", idToDelete);
+
+    if (idToDelete === undefined) {
+      alert("Unable to retrieve ID for deletion.");
+      return;
+    }
+
+    // Confirm deletion
     if (window.confirm("Are you sure you want to delete this item?")) {
-      mutation.mutate(id);
+      mutationDelete.mutate(idToDelete);
+      setFocusedRowIndex(focusedRowIndex);
     }
   };
 
@@ -309,6 +335,21 @@ const PengirimanTable: React.FC = () => {
     ));
   };
 
+  const handleEditClick = () => {
+    if (selectedRow) {
+      setEditMode(true); // Masuk ke mode edit
+      setValue("namaPengirim", selectedRow.namaPengirim);
+      setValue("alamatPengirim", selectedRow.alamatPengirim);
+      setValue("nohpPengirim", selectedRow.nohpPengirim);
+      setValue("namaPenerima", selectedRow.namaPenerima);
+      setValue("alamatPenerima", selectedRow.alamatPenerima);
+      setValue("nohpPenerima", selectedRow.nohpPenerima);
+      setValue("barang", selectedRow.barang);
+      setValue("totalHarga", selectedRow.totalHarga);
+      setValue("tanggalKeberangkatan", selectedRow.tanggalKeberangkatan);
+      setPopOver(true); // Buka form dialog
+    }
+  };
   const columns: ColDef<Pengiriman>[] = [
     {
       headerName: "No.",
@@ -369,166 +410,6 @@ const PengirimanTable: React.FC = () => {
         return date.toLocaleDateString("id-ID");
       },
     },
-    {
-      headerName: "Actions",
-      suppressNavigable: true,
-      cellRenderer: (params: ICellRendererParams) => (
-        <div className="flex space-x-2">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button>Update</Button>
-            </DialogTrigger>
-            <DialogContent className="min-w-full h-lvh bg-white">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1">Nama Pengirim</label>
-                    <input
-                      {...register("namaPengirim", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">Alamat Pengirim</label>
-                    <input
-                      {...register("alamatPengirim", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">No HP Pengirim</label>
-                    <input
-                      {...register("nohpPengirim", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">Nama Penerima</label>
-                    <input
-                      {...register("namaPenerima", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">Alamat Penerima</label>
-                    <input
-                      {...register("alamatPenerima", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1">No HP Penerima</label>
-                    <input
-                      {...register("nohpPenerima", { required: true })}
-                      className="w-full border border-gray-300 p-2"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <h2 className="text-xl font-bold mb-4">Barang</h2>
-                  {fields.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
-                    >
-                      <div>
-                        <label className="block mb-1">Nama Barang</label>
-                        <select
-                          {...register(`barang.${index}.barangId`, {
-                            required: true,
-                          })}
-                          className="w-full border border-gray-300 p-2"
-                        >
-                          <option value="">Pilih Barang</option>
-                          {isLoadingFetch ? (
-                            <option value="">Loading...</option>
-                          ) : (
-                            detailBarangOptions.map(
-                              (barang: { id: string; nama: string }) => (
-                                <option key={barang.id} value={barang.id}>
-                                  {barang.nama}
-                                </option>
-                              )
-                            )
-                          )}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block mb-1">Jumlah Barang</label>
-                        <input
-                          type="number"
-                          {...register(`barang.${index}.jumlahBarang`, {
-                            required: true,
-                            valueAsNumber: true,
-                          })}
-                          className="w-full border border-gray-300 p-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block mb-1">Harga Barang</label>
-                        <input
-                          type="number"
-                          {...register(`barang.${index}.harga`, {
-                            required: true,
-                            valueAsNumber: true,
-                          })}
-                          className="w-full border border-gray-300 p-2"
-                        />
-                      </div>
-                      <div className="col-span-full">
-                        <button
-                          type="button"
-                          className="text-red-500"
-                          onClick={() => remove(index)}
-                        >
-                          Hapus Barang
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      append({ barangId: "", jumlahBarang: 1, harga: 0 })
-                    }
-                    className="text-blue-500"
-                  >
-                    Tambah Barang
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block mb-1">Total Harga</label>
-                  <input
-                    type="number"
-                    readOnly
-                    {...register("totalHarga")}
-                    className="w-full border border-gray-300 p-2"
-                  />
-                </div>
-
-                <div>
-                  <button
-                    type="submit"
-                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-                  >
-                    Simpan Pengiriman
-                  </button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-          <Button
-            onClick={() => handleDelete(params.data.id)}
-            variant="destructive"
-          >
-            Delete
-          </Button>
-        </div>
-      ),
-      cellClass: "text-center",
-    },
   ];
 
   const getRowClass = (params: RowClassParams) => {
@@ -543,8 +424,11 @@ const PengirimanTable: React.FC = () => {
   const onRowClicked = (event: RowClickedEvent) => {
     if (event.rowIndex !== null) {
       setFocusedRowIndex(event.rowIndex);
-      setSelectedRowData(event.data as FormValues); // Store selected row data
+      setNewPengirimanId(null);
     }
+    const rowData = event.data as Pengiriman;
+    setSelectedRow(rowData);
+    localStorage.removeItem("newPengirimanId"); // Hapus data setelah digunakan
   };
 
   const gridOptions: GridOptions<Pengiriman> = {
@@ -591,11 +475,6 @@ const PengirimanTable: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    if (selectedRowData) {
-      reset(selectedRowData); // Update form values with selected row data
-    }
-  }, [selectedRowData, reset]);
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -610,9 +489,9 @@ const PengirimanTable: React.FC = () => {
               ref={gridRef}
               columnDefs={columns}
               rowModelType="infinite"
-              cacheBlockSize={500}
+              cacheBlockSize={50}
               suppressHeaderFocus={true}
-              maxBlocksInCache={500}
+              maxBlocksInCache={50}
               getRowClass={getRowClass}
               onRowClicked={onRowClicked}
               animateRows={true}
@@ -621,6 +500,187 @@ const PengirimanTable: React.FC = () => {
               gridOptions={gridOptions} // Pass the entire gridOptions correctly
             />
           )}
+        </div>
+        <div className="mt-6 gap-2 flex">
+          <Dialog open={popOver} onOpenChange={setPopOver}>
+            <DialogTrigger asChild onClick={() => setPopOver(true)}>
+              <Button variant="success" className="font-semibold text-sm">
+                <FaPlus /> Add
+              </Button>
+            </DialogTrigger>
+            {popOver ? (
+              <DialogContent className="min-w-full h-lvh bg-white">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block mb-1">Nama Pengirim</label>
+                      <input
+                        {...register("namaPengirim", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">Alamat Pengirim</label>
+                      <input
+                        {...register("alamatPengirim", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">No HP Pengirim</label>
+                      <input
+                        {...register("nohpPengirim", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">Nama Penerima</label>
+                      <input
+                        {...register("namaPenerima", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">Alamat Penerima</label>
+                      <input
+                        {...register("alamatPenerima", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">No HP Penerima</label>
+                      <input
+                        {...register("nohpPenerima", { required: true })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1">
+                        Tanggal Keberangkatan
+                      </label>
+                      <input
+                        type="date"
+                        {...register("tanggalKeberangkatan", {
+                          required: true,
+                        })}
+                        className="w-full border border-gray-300 p-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl font-bold mb-4">Barang</h2>
+                    {fields.map((item: Barang, index: number) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"
+                      >
+                        <div>
+                          <label className="block mb-1">Nama Barang</label>
+                          <select
+                            {...register(`barang.${index}.barangId`, {
+                              required: true,
+                            })}
+                            className="w-full border border-gray-300 p-2"
+                          >
+                            <option value="">Pilih Barang</option>
+                            {isLoadingBarang ? (
+                              <option value="">Loading...</option>
+                            ) : (
+                              detailBarangOptions.map(
+                                (barang: { id: string; nama: string }) => (
+                                  <option key={barang.id} value={barang.id}>
+                                    {barang.nama}
+                                  </option>
+                                )
+                              )
+                            )}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block mb-1">Jumlah Barang</label>
+                          <input
+                            type="number"
+                            {...register(`barang.${index}.jumlahBarang`, {
+                              required: true,
+                              valueAsNumber: true,
+                            })}
+                            className="w-full border border-gray-300 p-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-1">Harga Barang</label>
+                          <input
+                            type="number"
+                            {...register(`barang.${index}.harga`, {
+                              required: true,
+                              valueAsNumber: true,
+                            })}
+                            className="w-full border border-gray-300 p-2"
+                          />
+                        </div>
+                        <div className="col-span-full">
+                          <button
+                            type="button"
+                            className="text-red-500"
+                            onClick={() => remove(index)}
+                          >
+                            Hapus Barang
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        append({ barangId: "", jumlahBarang: 1, harga: 0 })
+                      }
+                      className="text-blue-500"
+                    >
+                      Tambah Barang
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1">Total Harga</label>
+                    <input
+                      type="number"
+                      readOnly
+                      {...register("totalHarga")}
+                      className="w-full border border-gray-300 p-2"
+                    />
+                  </div>
+
+                  <div>
+                    <button
+                      type="submit"
+                      className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+                    >
+                      Simpan Pengiriman
+                    </button>
+                  </div>
+                </form>
+              </DialogContent>
+            ) : (
+              ""
+            )}
+          </Dialog>
+
+          <Button
+            onClick={handleEditClick}
+            variant="warning"
+            className="font-semibold text-sm"
+          >
+            <MdEdit /> Edit
+          </Button>
+          <Button
+            onClick={handleDelete}
+            variant="destructive"
+            className="font-semibold text-sm"
+          >
+            <MdDelete />
+            Delete
+          </Button>
         </div>
       </div>
     </div>
