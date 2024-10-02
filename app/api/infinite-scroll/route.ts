@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
       .leftJoin("detail_barang", "barang.barangId", "detail_barang.id")
       .select(
         "pengiriman.*",
-        "barang.id as barangId",
+        "barang.barangId", // Ambil barangId dari tabel barang
         "detail_barang.nama as namaBarang",
-        "barang.jumlahBarang"
+        "barang.jumlahBarang",
+        "barang.harga" // Include harga to ensure it is available in the result
       )
       .orderBy("pengiriman.tanggalKeberangkatan", "desc")
       .offset(offset)
@@ -52,7 +53,6 @@ export async function POST(request: NextRequest) {
         tanggalKeberangkatan,
       ]);
     }
-
     if (filters.totalHarga && filters.totalHarga.trim() !== "") {
       baseQuery.where(
         "pengiriman.totalHarga",
@@ -87,7 +87,6 @@ export async function POST(request: NextRequest) {
         tanggalKeberangkatan,
       ]);
     }
-
     if (filters.totalHarga && filters.totalHarga.trim() !== "") {
       totalQuery.where("totalHarga", "=", parseFloat(filters.totalHarga));
     }
@@ -116,7 +115,7 @@ export async function POST(request: NextRequest) {
           // Add barang to existing entry
           existing.barang.push({
             id: row.barangId,
-            barangId: row.barangId,
+            barangId: row.barangId, // Ensure barangId is included
             namaBarang: row.namaBarang,
             jumlahBarang: row.jumlahBarang,
             harga: row.harga, // Price of the barang
@@ -128,8 +127,10 @@ export async function POST(request: NextRequest) {
             barang: [
               {
                 id: row.barangId,
+                barangId: row.barangId, // Ensure barangId is included
                 namaBarang: row.namaBarang,
                 jumlahBarang: row.jumlahBarang,
+                harga: row.harga, // Include harga as well
               },
             ],
           });

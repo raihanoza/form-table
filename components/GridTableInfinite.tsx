@@ -68,12 +68,18 @@ const PengirimanTable: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [popOver, setPopOver] = useState<boolean>(false);
   const [editMode, setEditMode] = useState<boolean>(false);
-  const limit = 50;
+  const limit = 500;
   const queryClient = useQueryClient();
   // const router = useRouter();
   const { register, control, handleSubmit, reset, setValue } =
     useForm<IPengirimanForm>({
       defaultValues: {
+        namaPengirim: "",
+        alamatPengirim: "",
+        nohpPengirim: "",
+        namaPenerima: "",
+        alamatPenerima: "",
+        nohpPenerima: "",
         barang: [{ barangId: "", jumlahBarang: 1, harga: 0 }],
         totalHarga: 0,
         tanggalKeberangkatan: "",
@@ -124,39 +130,31 @@ const PengirimanTable: React.FC = () => {
     return res.json();
   };
   const updatePengiriman = async (id: number, data: IPengirimanForm) => {
-    const res = await fetch(`/api/kirim-barang`, {
+    const res = await fetch(`/api/kirim-barang/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
     });
-
     if (!res.ok) throw new Error("Failed to update data");
     return res.json();
   };
-
   const mutation = useMutation(submitPengiriman, {
     onSuccess: (data) => {
-      console.log("Data submitted successfully:", data);
-      const newPengirimanId = data.data.pengirimanId; // ID pengiriman baru
-      setNewPengirimanId(newPengirimanId); // Simpan ID pengiriman baru
+      const newPengirimanId = data.data.pengirimanId;
       localStorage.setItem("newPengirimanId", String(newPengirimanId)); // Simpan di localStorage
       alert(data.message);
 
       setPopOver(false);
       reset();
-
-      // Invalidate the pengiriman query so it refetches
-      queryClient.invalidateQueries("pengiriman");
-
-      // Reload halaman setelah pengiriman sukses
       window.location.reload();
     },
     onError: () => {
       alert("Error dalam menyimpan data.");
     },
   });
+
   const mutationUpdate = useMutation(
     async (updatedData: IPengirimanForm) => {
       if (selectedRow && selectedRow.id) {
@@ -170,6 +168,7 @@ const PengirimanTable: React.FC = () => {
         reset();
         setEditMode(false); // Kembali ke mode tambah setelah update
         queryClient.invalidateQueries("pengiriman");
+        window.location.reload();
       },
       onError: () => {
         alert("Gagal memperbarui data.");
@@ -225,10 +224,13 @@ const PengirimanTable: React.FC = () => {
             const lastRow = result.totalData;
             if (result.data.length) {
               params.successCallback(result.data, lastRow);
+
               if (newPengirimanId && gridApiRef.current) {
-                const rowIndex = result?.data.findIndex(
+                const rowIndex = result.data.findIndex(
                   (pengiriman) => pengiriman.id === newPengirimanId
                 );
+
+                console.log("Row Index: ", rowIndex); // Debugging
                 if (rowIndex !== -1) {
                   setTimeout(() => {
                     gridApiRef.current?.ensureIndexVisible(rowIndex);
@@ -236,7 +238,7 @@ const PengirimanTable: React.FC = () => {
                       rowIndex,
                       "namaPengirim"
                     );
-                  }, 0);
+                  }, 100); // Cobalah menambah delay di sini
                 }
               }
             } else {
@@ -285,10 +287,6 @@ const PengirimanTable: React.FC = () => {
 
     // Retrieve the row node safely
     const rowNode = gridApiRef.current?.getRowNode(focusedRowIndex.toString());
-
-    // Log the rowNode for debugging
-    console.log("RowNode: ", rowNode);
-
     // Check if rowNode is defined
     if (!rowNode) {
       alert("Row not found.");
@@ -297,9 +295,6 @@ const PengirimanTable: React.FC = () => {
 
     // Extract the ID from the row node
     const idToDelete = rowNode.data?.id; // Use optional chaining here
-
-    // Log the ID for debugging
-    console.log("ID to delete: ", idToDelete);
 
     if (idToDelete === undefined) {
       alert("Unable to retrieve ID for deletion.");
@@ -337,6 +332,11 @@ const PengirimanTable: React.FC = () => {
 
   const handleEditClick = () => {
     if (selectedRow) {
+      const formattedDate = new Date(selectedRow.tanggalKeberangkatan)
+        .toISOString()
+        .split("T")[0];
+      setValue("tanggalKeberangkatan", formattedDate);
+
       setEditMode(true); // Masuk ke mode edit
       setValue("namaPengirim", selectedRow.namaPengirim);
       setValue("alamatPengirim", selectedRow.alamatPengirim);
@@ -346,7 +346,7 @@ const PengirimanTable: React.FC = () => {
       setValue("nohpPenerima", selectedRow.nohpPenerima);
       setValue("barang", selectedRow.barang);
       setValue("totalHarga", selectedRow.totalHarga);
-      setValue("tanggalKeberangkatan", selectedRow.tanggalKeberangkatan);
+      setValue("tanggalKeberangkatan", formattedDate);
       setPopOver(true); // Buka form dialog
     }
   };
@@ -416,19 +416,19 @@ const PengirimanTable: React.FC = () => {
     if (params.node.rowIndex === focusedRowIndex) {
       return "ag-row-focus"; // Menambahkan kelas fokus untuk baris
     }
-    if (newPengirimanId && params.data.id === newPengirimanId) {
+    if (newPengirimanId && params.data && params.data.id === newPengirimanId) {
       return "ag-row-focus"; // Gaya fokus untuk baris yang memiliki ID baru
     }
     return "";
   };
+
   const onRowClicked = (event: RowClickedEvent) => {
     if (event.rowIndex !== null) {
       setFocusedRowIndex(event.rowIndex);
-      setNewPengirimanId(null);
+      setNewPengirimanId(null); // Reset newPengirimanId setelah baris dipilih
     }
     const rowData = event.data as Pengiriman;
     setSelectedRow(rowData);
-    localStorage.removeItem("newPengirimanId"); // Hapus data setelah digunakan
   };
 
   const gridOptions: GridOptions<Pengiriman> = {
@@ -445,13 +445,19 @@ const PengirimanTable: React.FC = () => {
       gridApiRef.current = params.api;
     },
   };
-
   useEffect(() => {
     if (data && data.data.length > 0 && gridApiRef.current) {
-      gridApiRef.current.setFocusedCell(0, "namaPengirim"); // Assuming you want to focus on 'namaPengirim' column
+      const rowIndex =
+        newPengirimanId !== null
+          ? data.data.findIndex((p) => p.id === newPengirimanId)
+          : -1;
+      if (rowIndex >= 0) {
+        gridApiRef.current.setFocusedCell(rowIndex, "namaPengirim");
+      } else {
+        gridApiRef.current.setFocusedCell(0, "namaPengirim"); // Fokus ke baris pertama jika tidak ada baris baru
+      }
     }
   }, [data]);
-
   useEffect(() => {
     if (gridApiRef.current) {
       gridApiRef.current.addEventListener("paginationChanged", () => {
@@ -466,6 +472,11 @@ const PengirimanTable: React.FC = () => {
       });
     }
   }, []);
+  useEffect(() => {
+    if (selectedRow) {
+      setValue("barang", selectedRow.barang); // Pastikan 'barang' adalah array
+    }
+  }, [selectedRow, setValue]);
 
   useEffect(() => {
     const savedPengirimanId = localStorage.getItem("newPengirimanId");
@@ -489,9 +500,9 @@ const PengirimanTable: React.FC = () => {
               ref={gridRef}
               columnDefs={columns}
               rowModelType="infinite"
-              cacheBlockSize={50}
+              cacheBlockSize={500}
               suppressHeaderFocus={true}
-              maxBlocksInCache={50}
+              maxBlocksInCache={500}
               getRowClass={getRowClass}
               onRowClicked={onRowClicked}
               animateRows={true}
@@ -504,7 +515,15 @@ const PengirimanTable: React.FC = () => {
         <div className="mt-6 gap-2 flex">
           <Dialog open={popOver} onOpenChange={setPopOver}>
             <DialogTrigger asChild onClick={() => setPopOver(true)}>
-              <Button variant="success" className="font-semibold text-sm">
+              <Button
+                onClick={() => {
+                  setPopOver(true);
+                  setEditMode(false);
+                  reset();
+                }}
+                variant="success"
+                className="font-semibold text-sm"
+              >
                 <FaPlus /> Add
               </Button>
             </DialogTrigger>
@@ -582,6 +601,7 @@ const PengirimanTable: React.FC = () => {
                               required: true,
                             })}
                             className="w-full border border-gray-300 p-2"
+                            defaultValue={item.barangId} // Set default value from the data
                           >
                             <option value="">Pilih Barang</option>
                             {isLoadingBarang ? (
@@ -606,6 +626,7 @@ const PengirimanTable: React.FC = () => {
                               valueAsNumber: true,
                             })}
                             className="w-full border border-gray-300 p-2"
+                            defaultValue={item.jumlahBarang} // Set default value from the data
                           />
                         </div>
                         <div>
@@ -617,6 +638,7 @@ const PengirimanTable: React.FC = () => {
                               valueAsNumber: true,
                             })}
                             className="w-full border border-gray-300 p-2"
+                            defaultValue={item.harga} // Set default value from the data
                           />
                         </div>
                         <div className="col-span-full">
@@ -630,6 +652,7 @@ const PengirimanTable: React.FC = () => {
                         </div>
                       </div>
                     ))}
+
                     <button
                       type="button"
                       onClick={() =>
